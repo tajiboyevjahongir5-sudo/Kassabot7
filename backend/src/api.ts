@@ -73,19 +73,15 @@ app.post('/api/create-invoice', async (req, res) => {
 });
 
 // Serve static files from frontend build
-// TEMPORARILY COMMENTED OUT TO DEBUG RAILWAY HANG
-// app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+app.use(express.static(path.join(__dirname, '../../frontend/dist')));
 
 // Catch-all route for frontend SPA routing
 app.use((req, res) => {
-  res.status(200).send(`
-    <!DOCTYPE html>
-    <html>
-      <head><title>Debug View</title></head>
-      <body style="background: white; color: black; padding: 20px;">
-        <h1>Server is ALIVE</h1>
-        <p>If you see this, the Express server is working perfectly, but the frontend static files were causing the hang!</p>
-      </body>
-    </html>
-  `);
+  const filePath = path.join(__dirname, '../../frontend/dist/index.html');
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Frontend build not found at', filePath);
+      res.status(500).send('Frontend is building or not found. Please wait.');
+    }
+  });
 });

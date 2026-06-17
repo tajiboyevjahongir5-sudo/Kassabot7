@@ -15,8 +15,7 @@ async function bootstrap() {
   });
 
   try {
-    // TEMPORARILY DISABLED PRISMA TO DEBUG RAILWAY HANG
-    /*
+    // Dummy ma'lumotlar bilan to'ldirish (agar bo'sh bo'lsa)
     const channelCount = await prisma.channel.count();
     if (channelCount === 0) {
       console.log("Seeding initial data...");
@@ -48,7 +47,6 @@ async function bootstrap() {
         }
       });
     }
-    */
 
     // Start Bot
     if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== 'dummy') {
