@@ -6,7 +6,8 @@
     "install:backend": "cd backend && npm install && npx prisma generate",
     "install:frontend": "cd frontend && npm install",
     "build:frontend": "cd frontend && npm run build",
-    "build": "npm run install:all && npm run build:frontend",
-    "start": "cd backend && npx prisma db push && npx ts-node src/index.ts"
+    "build:backend": "cd backend && npx tsc",
+    "build": "npm run install:all && npm run build:frontend && npm run build:backend",
+    "start": "cd backend && npx prisma db push && node dist/index.js"
   }
 }
