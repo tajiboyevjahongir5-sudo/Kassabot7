@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id // Telegram user ID as string
+  username  String?
+  firstName String?
+  subs      Subscription[]
+}
+
+model Channel {
+  id        String   @id // Telegram chat ID as string
+  title     String
+  adminId   String
+  plans     Plan[]
+  subs      Subscription[]
+}
+
+model Plan {
+  id          Int      @id @default(autoincrement())
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id])
+  name        String
+  description String?
+  price       Int      // Price
+  priceType   String   @default("STARS") // STARS, SUM
+  duration    Int      // Duration in days
+}
+
+model Subscription {
+  id          Int      @id @default(autoincrement())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id])
+  status      String   @default("ACTIVE") // ACTIVE, EXPIRED
+  expiresAt   DateTime
+}
