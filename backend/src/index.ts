@@ -3,9 +3,14 @@ import { bot } from './bot';
 import { startCronJobs } from './cron';
 import { prisma } from './prisma';
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 async function bootstrap() {
+  // ALWAYS Start API immediately so Railway doesn't kill the container due to timeout
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[API] Server is running on port ${PORT}`);
+  });
+
   try {
     // Dummy ma'lumotlar bilan to'ldirish (agar bo'sh bo'lsa)
     const channelCount = await prisma.channel.count();
@@ -54,10 +59,6 @@ async function bootstrap() {
     console.error("Bootstrap error:", err);
   }
 
-  // ALWAYS Start API regardless of DB errors so Railway doesn't kill the container
-  app.listen(PORT, () => {
-    console.log(`[API] Server is running on port ${PORT}`);
-  });
 }
 
 bootstrap();
