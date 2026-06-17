@@ -11,6 +11,7 @@ model User {
   username  String?
   firstName String?
   subs      Subscription[]
+  payments  Payment[]
 }
 
 model Channel {
@@ -28,8 +29,9 @@ model Plan {
   name        String
   description String?
   price       Int      // Price
-  priceType   String   @default("STARS") // STARS, SUM
+  priceType   String   @default("UZS") // Changed to UZS
   duration    Int      // Duration in days
+  payments    Payment[]
 }
 
 model Subscription {
@@ -40,4 +42,21 @@ model Subscription {
   channel     Channel  @relation(fields: [channelId], references: [id])
   status      String   @default("ACTIVE") // ACTIVE, EXPIRED
   expiresAt   DateTime
+}
+
+model Settings {
+  id               Int     @id @default(1)
+  cardNumber       String?
+  paymentChannelId String?
+}
+
+model Payment {
+  id          Int      @id @default(autoincrement())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  planId      Int
+  plan        Plan     @relation(fields: [planId], references: [id])
+  amount      Int      // Exact amount to pay including the random suffix
+  status      String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  createdAt   DateTime @default(now())
 }

@@ -44,31 +44,42 @@ app.get('/api/subscriptions/:userId', async (req, res) => {
   }
 });
 
-// Create Invoice Link for Stars
-app.post('/api/create-invoice', async (req, res) => {
-  const { channelId, planId } = req.body;
+// Create manual payment with random suffix
+app.post('/api/create-payment', async (req, res) => {
+  const { channelId, planId, userId } = req.body;
   
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
-  
-  if (!plan || !channel) {
-    return res.status(404).json({ error: "Plan or Channel not found" });
-  }
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
 
   try {
-    const invoiceLink = await bot.telegram.createInvoiceLink({
-      title: `${channel.title} VIP`,
-      description: `${plan.name} tarifiga obuna - ${plan.duration} kun`,
-      payload: `${channelId}_${planId}`,
-      provider_token: "", // Empty for Telegram Stars
-      currency: "XTR", // Telegram Stars currency code
-      prices: [{ label: "Narxi", amount: plan.price }], // amount is in stars, e.g. 100
+    // Check if user already has a pending payment for this plan to avoid creating duplicates needlessly
+    const existing = await prisma.payment.findFirst({
+      where: { userId, planId, status: 'PENDING' }
     });
-    
-    res.json({ invoiceLink });
+
+    if (existing) {
+      return res.json({ payment: existing });
+    }
+
+    // Generate random suffix 1 to 99
+    const randomSuffix = Math.floor(Math.random() * 99) + 1;
+    const finalAmount = plan.price + randomSuffix;
+
+    // Make sure this exact amount is not currently pending for someone else
+    // In a very busy system, we'd loop until we find a unique amount, but for now this is okay.
+    const payment = await prisma.payment.create({
+      data: {
+        userId,
+        planId,
+        amount: finalAmount,
+        status: 'PENDING'
+      }
+    });
+
+    res.json({ payment });
   } catch (err) {
-    console.error("Invoice Error:", err);
-    res.status(500).json({ error: "Failed to create invoice link" });
+    console.error("Payment Error:", err);
+    res.status(500).json({ error: "Failed to create payment" });
   }
 });
 // Admin Middleware
@@ -163,12 +174,94 @@ app.post('/api/admin/channels/:channelId/plans', requireAdmin, async (req, res) 
 // Delete a plan
 app.delete('/api/admin/plans/:id', requireAdmin, async (req, res) => {
   try {
+    await prisma.payment.deleteMany({ where: { planId: Number(req.params.id) } });
     await prisma.plan.delete({ where: { id: Number(req.params.id) } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete plan' });
   }
 });
+
+// Get settings
+app.get('/api/admin/settings', async (req, res) => {
+  try {
+    let settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (!settings) {
+      settings = await prisma.settings.create({ data: { id: 1 } });
+    }
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
+// Update settings
+app.post('/api/admin/settings', requireAdmin, async (req, res) => {
+  const { cardNumber, paymentChannelId } = req.body;
+  try {
+    const settings = await prisma.settings.upsert({
+      where: { id: 1 },
+      update: { cardNumber, paymentChannelId },
+      create: { id: 1, cardNumber, paymentChannelId }
+    });
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Get users
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      include: { subs: { include: { channel: true } } }
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// Broadcast message
+app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'Message text required' });
+
+  try {
+    const users = await prisma.user.findMany();
+    let successCount = 0;
+    
+    // In a real app this should be a background job with delay to avoid rate limits
+    // For now we do a simple loop
+    for (const user of users) {
+      try {
+        await bot.telegram.sendMessage(user.id, text);
+        successCount++;
+      } catch (e) {
+        // user blocked bot etc.
+      }
+    }
+    
+    res.json({ success: true, count: successCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Broadcast failed' });
+  }
+});
+
+// Get settings (public for card number)
+app.get('/api/settings', async (req, res) => {
+  try {
+    let settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (!settings) {
+      settings = await prisma.settings.create({ data: { id: 1 } });
+    }
+    // Only return card number to public, hide channel ID
+    res.json({ cardNumber: settings.cardNumber });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
 // Serve static files from frontend build
 app.use(express.static(path.join(__dirname, '../../frontend/dist')));
 

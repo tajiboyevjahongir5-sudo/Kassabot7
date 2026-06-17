@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Crown, Star, Lock, CheckCircle2 } from 'lucide-react';
+import { Crown, Lock, CheckCircle2 } from 'lucide-react';
 import './index.css';
 
 // TypeScript interfaces
@@ -27,6 +27,8 @@ function UserView() {
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [activePayment, setActivePayment] = useState<any>(null);
+  const [cardNumber, setCardNumber] = useState<string>('');
 
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -56,6 +58,14 @@ function UserView() {
         console.error(err);
         setLoading(false);
       });
+
+    // Fetch public settings for card number
+    fetch(`${API_URL}/settings`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.cardNumber) setCardNumber(data.cardNumber);
+      })
+      .catch(err => console.error(err));
   }, []);
 
   const handlePay = async () => {
@@ -64,29 +74,21 @@ function UserView() {
     setPaying(true);
     
     try {
-      // Get invoice link from backend
-      const res = await fetch(`${API_URL}/create-invoice`, {
+      const userId = tg?.initDataUnsafe?.user?.id || 'dummy_user';
+
+      // Create or get pending payment
+      const res = await fetch(`${API_URL}/create-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: selectedChannel, planId: selectedPlan })
+        body: JSON.stringify({ channelId: selectedChannel, planId: selectedPlan, userId })
       });
       
       const data = await res.json();
       
-      if (data.invoiceLink && tg) {
-        // Open Telegram Invoice
-        tg.openInvoice(data.invoiceLink, (status: string) => {
-          if (status === 'paid') {
-            tg.showAlert("To'lovingiz qabul qilindi! Endi botga o'tib maxsus havolani oling.");
-            tg.close();
-          } else if (status === 'failed') {
-            tg.showAlert("To'lov amalga oshmadi.");
-          } else {
-             // cancelled or pending
-          }
-        });
+      if (data.payment) {
+        setActivePayment(data.payment);
       } else {
-        alert("Botdan to'lov ma'lumotlarini olishning imkoni bo'lmadi.");
+        alert("Xatolik: To'lov ma'lumotlarini olishning imkoni bo'lmadi.");
       }
     } catch (err) {
       console.error(err);
@@ -112,60 +114,104 @@ function UserView() {
       </header>
 
       <main>
-        {channels.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center' }}>
-            <p>Hozircha obunalar mavjud emas.</p>
+        {activePayment ? (
+          <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
+            <h2 style={{ color: 'var(--accent)', marginBottom: '15px' }}>To'lov qilish</h2>
+            <p style={{ marginBottom: '15px', fontSize: '14px', opacity: 0.9 }}>
+              Iltimos, quyidagi karta raqamiga <b>aynan</b> ko'rsatilgan summani o'tkazing. Agar 1 tiyin kam yoki ko'p bo'lsa tizim avtomat qabul qilmaydi!
+            </p>
+            
+            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
+              <div style={{ fontSize: '12px', opacity: 0.6 }}>Karta raqami:</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '1px', userSelect: 'all' }}>
+                {cardNumber || "Admin karta kiritmagan!"}
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid var(--accent)' }}>
+              <div style={{ fontSize: '12px', opacity: 0.6 }}>To'lanadigan summa (UZS):</div>
+              <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--accent)', userSelect: 'all' }}>
+                {activePayment.amount.toLocaleString('ru-RU')}
+              </div>
+            </div>
+
+            <button 
+              className="pay-btn" 
+              onClick={() => {
+                if (tg) {
+                  tg.showAlert("To'lov qilganingizdan so'ng bot sizga avtomatik ravishda yopiq kanal havolasini yuboradi. Kuting...");
+                  tg.close();
+                } else {
+                  alert("To'lovingiz tekshirilmoqda. Botga qayting.");
+                }
+              }}
+            >
+              Men to'lov qildim
+            </button>
+            <button 
+              style={{ marginTop: '15px', background: 'transparent', border: 'none', color: 'var(--text-main)', opacity: 0.6, cursor: 'pointer' }}
+              onClick={() => setActivePayment(null)}
+            >
+              Bekor qilish
+            </button>
           </div>
         ) : (
-          <div className="channels">
-            {channels.map((channel) => (
-              <div key={channel.id} className="card">
-                <div className="channel-header">
-                  <div className="channel-icon">
-                    <Crown size={24} />
-                  </div>
-                  <div className="channel-info">
-                    <h2>{channel.title}</h2>
-                    <p><Lock size={12} style={{ display: 'inline', marginRight: 4 }} />Yopiq hamjamiyat</p>
-                  </div>
-                </div>
-
-                <div className="plans">
-                  {channel.plans.map((plan) => (
-                    <div 
-                      key={plan.id}
-                      className={`plan-item ${selectedPlan === plan.id ? 'selected' : ''}`}
-                      onClick={() => {
-                        setSelectedPlan(plan.id);
-                        setSelectedChannel(channel.id);
-                      }}
-                    >
-                      <div>
-                        <div className="plan-name">{plan.name}</div>
-                        <div className="plan-desc">{plan.description}</div>
+          <>
+            {channels.length === 0 ? (
+              <div className="card" style={{ textAlign: 'center' }}>
+                <p>Hozircha obunalar mavjud emas.</p>
+              </div>
+            ) : (
+              <div className="channels">
+                {channels.map((channel) => (
+                  <div key={channel.id} className="card">
+                    <div className="channel-header">
+                      <div className="channel-icon">
+                        <Crown size={24} />
                       </div>
-                      <div className="plan-price">
-                        {plan.price} 
-                        {plan.priceType === 'STARS' ? <Star className="stars-icon" fill="currentColor" /> : 'UZS'}
-                        {selectedPlan === plan.id && (
-                          <CheckCircle2 size={18} color="var(--accent)" style={{ marginLeft: 8 }} />
-                        )}
+                      <div className="channel-info">
+                        <h2>{channel.title}</h2>
+                        <p><Lock size={12} style={{ display: 'inline', marginRight: 4 }} />Yopiq hamjamiyat</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
-        <button 
-          className="pay-btn" 
-          disabled={!selectedPlan || paying}
-          onClick={handlePay}
-        >
-          {paying ? <div className="spinner"></div> : "Obunani Faollashtirish"}
-        </button>
+                    <div className="plans">
+                      {channel.plans.map((plan) => (
+                        <div 
+                          key={plan.id}
+                          className={`plan-item ${selectedPlan === plan.id ? 'selected' : ''}`}
+                          onClick={() => {
+                            setSelectedPlan(plan.id);
+                            setSelectedChannel(channel.id);
+                          }}
+                        >
+                          <div>
+                            <div className="plan-name">{plan.name}</div>
+                            <div className="plan-desc">{plan.description}</div>
+                          </div>
+                          <div className="plan-price">
+                            {plan.price.toLocaleString('ru-RU')} UZS
+                            {selectedPlan === plan.id && (
+                              <CheckCircle2 size={18} color="var(--accent)" style={{ marginLeft: 8 }} />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button 
+              className="pay-btn" 
+              disabled={!selectedPlan || paying || channels.length === 0}
+              onClick={handlePay}
+            >
+              {paying ? <div className="spinner"></div> : "Obunani Faollashtirish"}
+            </button>
+          </>
+        )}
       </main>
     </>
   );

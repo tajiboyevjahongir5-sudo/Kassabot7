@@ -48,41 +48,74 @@ bot.command('admin', async (ctx) => {
   );
 });
 
-bot.on('pre_checkout_query', async (ctx) => {
-  await ctx.answerPreCheckoutQuery(true);
-});
-
-bot.on('successful_payment', async (ctx) => {
-  const paymentInfo = ctx.message.successful_payment;
-  const payload = paymentInfo.invoice_payload;
+bot.on('channel_post', async (ctx) => {
+  const channelId = ctx.chat.id.toString();
   
-  const [channelId, planIdStr] = payload.split('_');
-  const planId = parseInt(planIdStr);
+  // Check if this channel is the designated payment channel
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  if (!settings || settings.paymentChannelId !== channelId) {
+    return; // Ignore messages from other channels
+  }
 
-  const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  if (!plan) return ctx.reply("Tarif topilmadi.");
+  const text = (ctx.channelPost as any).text || "";
+  if (!text) return;
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + plan.duration);
+  // Normalize text: remove spaces and commas to easily match amounts like "100 042" or "100,042"
+  const normalizedText = text.replace(/[\s,]/g, '');
 
-  await prisma.subscription.create({
-    data: {
-      userId: ctx.from.id.toString(),
-      channelId: channelId,
-      expiresAt: expiresAt,
-      status: 'ACTIVE'
-    }
+  const pendingPayments = await prisma.payment.findMany({ 
+    where: { status: 'PENDING' },
+    include: { plan: true, user: true }
   });
 
-  try {
-    const inviteLink = await ctx.telegram.createChatInviteLink(channelId, {
-      member_limit: 1,
-      expire_date: Math.floor(Date.now() / 1000) + 86400,
-    });
+  for (const payment of pendingPayments) {
+    // Look for the exact amount bounded by non-digits
+    const amountStr = payment.amount.toString();
+    const regex = new RegExp('(^|\\D)' + amountStr + '(\\D|$)');
+    
+    if (regex.test(normalizedText)) {
+      // We found a match! Verify payment.
+      
+      // 1. Mark payment as completed
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'COMPLETED' }
+      });
 
-    await ctx.reply(`✅ To'lovingiz muvaffaqiyatli o'tdi!\n\nKanalga kirish uchun maxsus havola (faqat siz uchun, uni boshqalarga bermang):\n${inviteLink.invite_link}`);
-  } catch (err) {
-    console.error("Create link error:", err);
-    await ctx.reply("Kanalga havola yaratishda xatolik yuz berdi. Iltimos, adminga murojaat qiling (bot kanalda admin bo'lishi shart).");
+      // 2. Create or extend subscription
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+
+      await prisma.subscription.create({
+        data: {
+          userId: payment.userId,
+          channelId: payment.plan.channelId,
+          expiresAt: expiresAt,
+          status: 'ACTIVE'
+        }
+      });
+
+      // 3. Generate invite link and send it to the user
+      try {
+        const inviteLink = await ctx.telegram.createChatInviteLink(payment.plan.channelId, {
+          member_limit: 1,
+          expire_date: Math.floor(Date.now() / 1000) + 86400,
+        });
+
+        await bot.telegram.sendMessage(
+          payment.userId, 
+          `✅ To'lovingiz (${payment.amount} so'm) tasdiqlandi!\n\nKanalga kirish uchun maxsus havola (faqat siz uchun, uni boshqalarga bermang):\n${inviteLink.invite_link}`
+        );
+      } catch (err) {
+        console.error("Create link error:", err);
+        await bot.telegram.sendMessage(
+          payment.userId, 
+          `✅ To'lovingiz tasdiqlandi, lekin kanalga havola yaratishda xatolik yuz berdi. Iltimos, adminga murojaat qiling.`
+        );
+      }
+
+      // Stop after processing this payment match so we don't apply one message to multiple identical payments (if any)
+      break;
+    }
   }
 });
