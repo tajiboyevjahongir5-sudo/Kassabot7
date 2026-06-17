@@ -10,7 +10,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 async function bootstrap() {
   // ALWAYS Start API immediately so Railway doesn't kill the container due to timeout
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, () => {
     console.log(`[API] Server is running on port ${PORT}`);
   });
 
