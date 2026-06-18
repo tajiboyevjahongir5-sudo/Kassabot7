@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Receipt, Box, BarChart2, Clock } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock } from 'lucide-react';
 import './index.css';
 
 // TypeScript interfaces
@@ -26,7 +26,7 @@ export default function AdminView() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, activeSubs: 0, totalChannels: 0 });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('channels'); // channels, settings, users, broadcast
+  const [activeTab, setActiveTab] = useState('payments'); // payments, channels, users, broadcast, stats, settings
 
   // Settings
   const [settings, setSettings] = useState({ cardNumber: '', paymentChannelId: '' });
@@ -36,8 +36,9 @@ export default function AdminView() {
   const [broadcastText, setBroadcastText] = useState('');
   const [broadcasting, setBroadcasting] = useState(false);
 
-  // Users List
+  // Users and Payments
   const [users, setUsers] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   
   // New channel form
   const [newChannelId, setNewChannelId] = useState('');
@@ -57,16 +58,18 @@ export default function AdminView() {
 
   const fetchData = async () => {
     try {
-      const [chRes, stRes, setRes, usrRes] = await Promise.all([
+      const [chRes, stRes, setRes, usrRes, payRes] = await Promise.all([
         fetch(`${API_URL}/channels`),
         fetch(`${API_URL}/admin/stats`, { headers }),
         fetch(`${API_URL}/admin/settings`, { headers }),
-        fetch(`${API_URL}/admin/users`, { headers })
+        fetch(`${API_URL}/admin/users`, { headers }),
+        fetch(`${API_URL}/admin/payments`, { headers })
       ]);
       if (chRes.ok) setChannels(await chRes.json());
       if (stRes.ok) setStats(await stRes.json());
       if (setRes.ok) setSettings(await setRes.json());
       if (usrRes.ok) setUsers(await usrRes.json());
+      if (payRes.ok) setPayments(await payRes.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -199,6 +202,24 @@ export default function AdminView() {
     }
   };
 
+  const handlePaymentAction = async (id: number, action: 'confirm' | 'reject') => {
+    if (!confirm(`Haqiqatan ham bu to'lovni ${action === 'confirm' ? 'tasdiqlaysizmi' : 'bekor qilasizmi'}?`)) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/payments/${id}/${action}`, {
+        method: 'POST',
+        headers
+      });
+      if (res.ok) {
+        alert("Bajarildi!");
+        fetchData();
+      } else {
+        alert("Xatolik yuz berdi");
+      }
+    } catch (err) {
+      alert("Xatolik yuz berdi");
+    }
+  };
+
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><div className="spinner"></div></div>;
   }
@@ -214,13 +235,17 @@ export default function AdminView() {
       </header>
 
       <div className="admin-tabs">
-        <div className={`admin-tab-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-          <div className="admin-tab-icon"><Receipt size={24} color={activeTab === 'orders' ? '#10b981' : '#3b82f6'} /></div>
-          <div className="admin-tab-label">Buyurtmalar</div>
+        <div className={`admin-tab-item ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>
+          <div className="admin-tab-icon"><CreditCard size={24} color={activeTab === 'payments' ? '#10b981' : '#3b82f6'} /></div>
+          <div className="admin-tab-label">To'lovlar</div>
+        </div>
+        <div className={`admin-tab-item ${activeTab === 'broadcast' ? 'active' : ''}`} onClick={() => setActiveTab('broadcast')}>
+          <div className="admin-tab-icon"><Send size={24} color={activeTab === 'broadcast' ? '#10b981' : '#f59e0b'} /></div>
+          <div className="admin-tab-label">Xabarnoma</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'channels' ? 'active' : ''}`} onClick={() => setActiveTab('channels')}>
           <div className="admin-tab-icon"><Box size={24} color={activeTab === 'channels' ? '#10b981' : '#eab308'} /></div>
-          <div className="admin-tab-label">Mahsulotlar</div>
+          <div className="admin-tab-label">Kanal +</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
           <div className="admin-tab-icon"><Users size={24} color={activeTab === 'users' ? '#10b981' : '#10b981'} /></div>
@@ -285,7 +310,7 @@ export default function AdminView() {
           </div>
         )}
 
-        {activeTab === 'orders' && (
+        {activeTab === 'broadcast' && (
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Hammaga xabar yuborish</h2>
             <form onSubmit={handleBroadcast} className="card" style={{ padding: '20px', background: '#151a28', border: '1px solid #2a3441', borderRadius: '16px' }}>
@@ -301,6 +326,38 @@ export default function AdminView() {
                 {broadcasting ? <div className="spinner"></div> : <><Send size={16} style={{ display: 'inline', marginRight: '5px' }} /> Yuborish</>}
               </button>
             </form>
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Kutayotgan To'lovlar</h2>
+              <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: '500' }}>{payments.length} ta</span>
+            </div>
+            {payments.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                Kutayotgan to'lovlar yo'q
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {payments.map(pay => (
+                  <div key={pay.id} className="user-card">
+                    <div className="user-card-top" style={{ borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
+                      <div className="user-info">
+                        <div className="user-name">{pay.user?.firstName || 'Ismsiz'} {pay.user?.username ? `(@${pay.user?.username})` : ''}</div>
+                        <div className="user-username" style={{ color: '#10b981', fontSize: '18px', fontWeight: 'bold', margin: '5px 0' }}>{pay.amount.toLocaleString('ru-RU')} UZS</div>
+                        <div style={{ fontSize: '13px', color: '#6b7280' }}>Tarif: {pay.plan?.name}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                      <button onClick={() => handlePaymentAction(pay.id, 'confirm')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Tasdiqlash</button>
+                      <button onClick={() => handlePaymentAction(pay.id, 'reject')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer' }}>Bekor qilish</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

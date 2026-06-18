@@ -248,6 +248,107 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
   }
 });
 
+// Get pending payments
+app.get('/api/admin/payments', requireAdmin, async (req, res) => {
+  try {
+    const payments = await prisma.payment.findMany({
+      where: { status: 'PENDING' },
+      include: { user: true, plan: true }
+    });
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get payments' });
+  }
+});
+
+// Confirm payment
+app.post('/api/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
+  try {
+    const paymentId = Number(req.params.id);
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { plan: true }
+    });
+
+    if (!payment || payment.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Invalid payment or already processed' });
+    }
+
+    // Mark as completed
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { status: 'COMPLETED' }
+    });
+
+    // Create subscription
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+
+    await prisma.subscription.create({
+      data: {
+        userId: payment.userId,
+        channelId: payment.plan.channelId,
+        expiresAt: expiresAt,
+        status: 'ACTIVE'
+      }
+    });
+
+    // Try sending invite link
+    try {
+      const inviteLink = await bot.telegram.createChatInviteLink(payment.plan.channelId, {
+        member_limit: 1,
+        expire_date: Math.floor(Date.now() / 1000) + 86400,
+      });
+
+      await bot.telegram.sendMessage(
+        payment.userId, 
+        `✅ To'lovingiz (${payment.amount} so'm) admin tomonidan tasdiqlandi!\n\nKanalga kirish uchun maxsus havola (faqat siz uchun, uni boshqalarga bermang):\n${inviteLink.invite_link}`
+      );
+    } catch (err) {
+      console.error("Manual invite link error:", err);
+      try {
+        await bot.telegram.sendMessage(
+          payment.userId, 
+          `✅ To'lovingiz tasdiqlandi, lekin kanalga havola yaratishda xatolik yuz berdi. Iltimos, adminga murojaat qiling.`
+        );
+      } catch (e) {} // ignore if user blocked
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Confirmation failed' });
+  }
+});
+
+// Reject payment
+app.post('/api/admin/payments/:id/reject', requireAdmin, async (req, res) => {
+  try {
+    const paymentId = Number(req.params.id);
+    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+
+    if (!payment || payment.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Invalid payment' });
+    }
+
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { status: 'CANCELLED' }
+    });
+
+    try {
+      await bot.telegram.sendMessage(
+        payment.userId,
+        `❌ Kechirasiz, to'lovingiz (${payment.amount} so'm) qabul qilinmadi yoki tasdiqlanmadi. Iltimos, ma'lumotlarni tekshiring.`
+      );
+    } catch (e) {}
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Rejection failed' });
+  }
+});
+
 // Get settings (public for card number)
 app.get('/api/settings', async (req, res) => {
   try {
