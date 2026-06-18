@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Tag } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Tag, Upload } from 'lucide-react';
 import './index.css';
+
 
 // TypeScript interfaces
 interface Plan {
@@ -174,6 +175,41 @@ export default function AdminView() {
     } catch (err) {
       alert('Error deleting plan');
     }
+  };
+
+  const compressAndSetImage = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setBroadcastImageBase64(compressedBase64);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleBroadcast = async (e: React.FormEvent) => {
@@ -358,26 +394,112 @@ export default function AdminView() {
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Hammaga xabar yuborish</h2>
             <form onSubmit={handleBroadcast} className="cyber-card" style={{ padding: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Rasm (ixtiyoriy):</label>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>Rasm (ixtiyoriy):</label>
+                
                 <input 
                   type="file" 
+                  id="broadcast-image-input"
                   accept="image/*" 
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => setBroadcastImageBase64(reader.result as string);
-                      reader.readAsDataURL(file);
-                    } else {
-                      setBroadcastImageBase64(null);
+                      compressAndSetImage(file);
                     }
                   }} 
-                  style={{ color: '#fff' }} 
+                  style={{ display: 'none' }} 
                 />
-                {broadcastImageBase64 && (
-                  <div style={{ marginTop: '10px' }}>
-                    <img src={broadcastImageBase64} alt="preview" style={{ maxHeight: '150px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                
+                {!broadcastImageBase64 ? (
+                  <label 
+                    htmlFor="broadcast-image-input" 
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '24px 16px',
+                      borderRadius: '12px',
+                      border: '2px dashed rgba(0, 240, 255, 0.3)',
+                      background: 'rgba(0, 240, 255, 0.02)',
+                      color: 'var(--accent-cyan)',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      textAlign: 'center',
+                      boxShadow: 'inset 0 0 10px rgba(0, 240, 255, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--accent-cyan)';
+                      e.currentTarget.style.boxShadow = '0 0 15px rgba(0, 240, 255, 0.15), inset 0 0 15px rgba(0, 240, 255, 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(0, 240, 255, 0.3)';
+                      e.currentTarget.style.boxShadow = 'inset 0 0 10px rgba(0, 240, 255, 0.05)';
+                    }}
+                  >
+                    <Upload size={28} style={{ marginBottom: '8px', filter: 'drop-shadow(0 0 5px var(--accent-cyan))' }} />
+                    <span style={{ fontSize: '14px', fontWeight: '600' }}>Rasm tanlash</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>PNG, JPG formatlar (avtomatik siqiladi)</span>
+                  </label>
+                ) : (
+                  <div 
+                    style={{ 
+                      position: 'relative', 
+                      borderRadius: '12px', 
+                      border: '1px solid rgba(176, 38, 255, 0.3)', 
+                      background: 'rgba(20, 22, 35, 0.8)',
+                      padding: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      boxShadow: '0 0 15px rgba(176, 38, 255, 0.15)'
+                    }}
+                  >
+                    <img 
+                      src={broadcastImageBase64} 
+                      alt="preview" 
+                      style={{ 
+                        width: '60px', 
+                        height: '60px', 
+                        objectFit: 'cover', 
+                        borderRadius: '8px', 
+                        border: '1px solid rgba(255,255,255,0.1)' 
+                      }} 
+                    />
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>Rasm tanlandi</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Yuklashga tayyor</div>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setBroadcastImageBase64(null);
+                        const fileInput = document.getElementById('broadcast-image-input') as HTMLInputElement;
+                        if (fileInput) fileInput.value = '';
+                      }}
+                      style={{ 
+                        background: 'rgba(255, 0, 85, 0.1)', 
+                        border: '1px solid rgba(255, 0, 85, 0.3)', 
+                        color: 'var(--accent-red)', 
+                        cursor: 'pointer', 
+                        padding: '8px', 
+                        borderRadius: '8px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 0, 85, 0.2)';
+                        e.currentTarget.style.boxShadow = '0 0 8px rgba(255, 0, 85, 0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 0, 85, 0.1)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 )}
               </div>
@@ -476,16 +598,68 @@ export default function AdminView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {users.map(user => {
                 const joinedDate = new Date(user.createdAt || Date.now()).toLocaleDateString('uz-UZ');
+                const profileUrl = user.username ? `https://t.me/${user.username}` : `tg://user?id=${user.id}`;
                 return (
                   <div key={user.id} className="payment-card" style={{ padding: '0', overflow: 'hidden', position: 'relative' }}>
                     {/* Top blue bar like in screenshot */}
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '120px', height: '6px', background: 'linear-gradient(90deg, #3b82f6, #00f0ff)', borderBottomRightRadius: '8px' }}></div>
                     
+                    {/* Circuit Board overlay & Code Watermark on the right side */}
+                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', opacity: 0.12, pointerEvents: 'none', zIndex: 1, overflow: 'hidden' }}>
+                      <svg width="100%" height="100%" viewBox="0 0 200 150" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1">
+                        {/* Circuit board paths */}
+                        <path d="M120,10 L160,10 L180,30 L180,90 L200,110" />
+                        <circle cx="120" cy="10" r="2.5" fill="rgba(255,255,255,0.4)" />
+                        <circle cx="200" cy="110" r="2.5" fill="rgba(255,255,255,0.4)" />
+                        <path d="M140,40 L155,55 L155,100 L170,115" />
+                        <circle cx="140" cy="40" r="2.5" fill="rgba(255,255,255,0.4)" />
+                        <circle cx="170" cy="115" r="2.5" fill="rgba(255,255,255,0.4)" />
+                        
+                        {/* Code matrix/lines */}
+                        <text x="10" y="25" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"# DATABASE_CONNECTION_URL = ..."}</text>
+                        <text x="10" y="38" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"FuncClass DbCreate() {"}</text>
+                        <text x="20" y="51" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"const list = await prisma.user.findMany({"}</text>
+                        <text x="30" y="64" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"include: { subs: true }"}</text>
+                        <text x="20" y="77" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"});"}</text>
+                        <text x="20" y="90" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"return list.map(u => u.id);"}</text>
+                        <text x="10" y="103" fill="#00f0ff" fontFamily="monospace" fontSize="6.5">{"}"}</text>
+                      </svg>
+                    </div>
+
                     <div style={{ display: 'flex', padding: '16px', position: 'relative', zIndex: 2, alignItems: 'center' }}>
-                      {/* Avatar */}
-                      <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle, #1e3a8a, #0b0f19)', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', color: '#fff', boxShadow: '0 0 15px rgba(59, 130, 246, 0.5)', marginRight: '16px', zIndex: 2 }}>
-                        {user.firstName ? user.firstName.charAt(0) : 'U'}
-                      </div>
+                      {/* Avatar with click handler redirecting to Telegram */}
+                      <a 
+                        href={profileUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{ 
+                          textDecoration: 'none', 
+                          display: 'block',
+                          cursor: 'pointer',
+                          marginRight: '16px',
+                          zIndex: 2,
+                          transition: 'transform 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        <div style={{ 
+                          width: '60px', 
+                          height: '60px', 
+                          borderRadius: '50%', 
+                          background: 'radial-gradient(circle, #1e3a8a, #0b0f19)', 
+                          border: '2px solid #3b82f6', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          fontSize: '24px', 
+                          fontWeight: 'bold', 
+                          color: '#fff', 
+                          boxShadow: '0 0 15px rgba(59, 130, 246, 0.5)',
+                        }}>
+                          {user.firstName ? user.firstName.charAt(0) : 'U'}
+                        </div>
+                      </a>
                       
                       {/* User Info */}
                       <div style={{ flex: 1, zIndex: 2 }}>
@@ -493,16 +667,38 @@ export default function AdminView() {
                           <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', textShadow: '0 0 5px rgba(255,255,255,0.3)' }}>{user.firstName || 'Ismsiz'}</div>
                         </div>
                         <div style={{ color: '#3b82f6', fontSize: '14px', marginBottom: '2px' }}>
-                          <a href={`tg://user?id=${user.id}`} style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <a 
+                            href={profileUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
                             {user.username ? `@${user.username}` : `@user${user.id}`} <Send size={12} style={{ filter: 'drop-shadow(0 0 5px #3b82f6)' }} />
                           </a>
                         </div>
-                        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>
+                        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
                           ID: {user.id}
                         </div>
-                        <div style={{ background: 'rgba(0, 255, 102, 0.1)', border: '1px solid rgba(0, 255, 102, 0.3)', color: '#00ff66', padding: '4px 12px', borderRadius: '8px', display: 'inline-block', fontSize: '13px', fontWeight: '600', marginTop: '6px', backdropFilter: 'blur(4px)' }}>
+                        
+                        {/* Stretched green obuna pill as in screenshot */}
+                        <div style={{ 
+                          background: 'rgba(0, 255, 102, 0.08)', 
+                          border: '1px solid rgba(0, 255, 102, 0.3)', 
+                          color: 'var(--accent-green)', 
+                          padding: '6px 14px', 
+                          borderRadius: '8px', 
+                          display: 'block', 
+                          width: '100%',
+                          maxWidth: '280px',
+                          fontSize: '13px', 
+                          fontWeight: '600', 
+                          marginTop: '8px', 
+                          backdropFilter: 'blur(4px)',
+                          boxShadow: 'inset 0 0 8px rgba(0, 255, 102, 0.05)'
+                        }}>
                           {user.subs?.length || 0} obuna
                         </div>
+                        
                         <div style={{ display: 'flex', alignItems: 'center', color: '#9ca3af', fontSize: '12px', marginTop: '8px' }}>
                           <Clock size={12} style={{ marginRight: '6px', color: '#00f0ff' }} />
                           Qo'shilgan: {joinedDate}

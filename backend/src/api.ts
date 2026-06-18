@@ -7,7 +7,9 @@ import path from 'path';
 
 export const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 
 // Health check route for Railway (must be BEFORE static files to avoid libuv thread pool exhaustion)
 app.get('/health', (req, res) => {
