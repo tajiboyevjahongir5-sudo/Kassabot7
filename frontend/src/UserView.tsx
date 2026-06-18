@@ -29,6 +29,8 @@ function UserView() {
   const [paying, setPaying] = useState(false);
   const [activePayment, setActivePayment] = useState<any>(null);
   const [cardNumber, setCardNumber] = useState<string>('');
+  const [promoCode, setPromoCode] = useState('');
+  const [promoStatus, setPromoStatus] = useState<string | null>(null);
 
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -80,7 +82,7 @@ function UserView() {
       const res = await fetch(`${API_URL}/create-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: selectedChannel, planId: selectedPlan, userId })
+        body: JSON.stringify({ channelId: selectedChannel, planId: selectedPlan, userId, promoCode: promoCode || undefined })
       });
       
       const data = await res.json();
@@ -202,6 +204,38 @@ function UserView() {
                 ))}
               </div>
             )}
+
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #374151', background: '#111827', color: '#fff', fontSize: '14px', textTransform: 'uppercase' }}
+                  placeholder="Promo-kod (ixtiyoriy)"
+                  value={promoCode}
+                  onChange={e => { setPromoCode(e.target.value); setPromoStatus(null); }}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!promoCode || !selectedPlan) return;
+                    try {
+                      const res = await fetch(`${API_URL}/validate-promo`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code: promoCode, planId: selectedPlan })
+                      });
+                      const data = await res.json();
+                      if (data.valid) {
+                        setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS`);
+                      } else {
+                        setPromoStatus('❌ Promo-kod noto\'g\'ri yoki muddati tugagan');
+                      }
+                    } catch { setPromoStatus('❌ Tekshirishda xatolik'); }
+                  }}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >Tekshir</button>
+              </div>
+              {promoStatus && <div style={{ fontSize: '13px', marginTop: '6px', color: promoStatus.startsWith('✅') ? '#10b981' : '#ef4444' }}>{promoStatus}</div>}
+            </div>
 
             <button 
               className="pay-btn" 

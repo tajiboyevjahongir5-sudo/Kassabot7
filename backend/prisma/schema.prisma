@@ -59,4 +59,16 @@ model Payment {
   amount      Int      // Exact amount to pay including the random suffix
   status      String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
   createdAt   DateTime @default(now())
+  promoCode   String?  // Applied promo code
+}
+
+model PromoCode {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  discountType  String   @default("percent") // percent or fixed
+  discountValue Int      // e.g. 20 for 20% or 5000 for 5000 UZS off
+  maxUses       Int      @default(0) // 0 = unlimited
+  usedCount     Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
 }

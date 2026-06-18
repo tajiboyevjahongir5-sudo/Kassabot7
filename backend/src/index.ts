@@ -1,6 +1,5 @@
 import { app } from './api';
-import { bot } from './bot';
-import { startCronJobs } from './cron';
+import { bot, startSubscriptionCron, startExpiryWarningCron, startPaymentTimeoutCron } from './bot';
 import { prisma } from './prisma';
 
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
@@ -60,8 +59,11 @@ async function bootstrap() {
       console.log(`[Bot] Skipping bot launch, no valid BOT_TOKEN provided.`);
     }
 
-    // Start Cron
-    startCronJobs();
+    // Start Cron Jobs
+    startSubscriptionCron();
+    startExpiryWarningCron();
+    startPaymentTimeoutCron();
+    console.log('[CRON] All cron jobs started.');
   } catch (err) {
     console.error("Bootstrap error:", err);
   }

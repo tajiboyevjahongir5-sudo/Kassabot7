@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Tag } from 'lucide-react';
 import './index.css';
 
 // TypeScript interfaces
@@ -36,9 +36,16 @@ export default function AdminView() {
   const [broadcastText, setBroadcastText] = useState('');
   const [broadcasting, setBroadcasting] = useState(false);
 
-  // Users and Payments
+  // Users, Payments, Revenue, Promos
   const [users, setUsers] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [paymentFilter, setPaymentFilter] = useState('PENDING');
+  const [revenue, setRevenue] = useState({ totalRevenue: 0, totalPayments: 0 });
+  const [promos, setPromos] = useState<any[]>([]);
+  const [newPromoCode, setNewPromoCode] = useState('');
+  const [newPromoType, setNewPromoType] = useState('percent');
+  const [newPromoValue, setNewPromoValue] = useState('');
+  const [newPromoMaxUses, setNewPromoMaxUses] = useState('');
   
   // New channel form
   const [newChannelId, setNewChannelId] = useState('');
@@ -58,24 +65,32 @@ export default function AdminView() {
 
   const fetchData = async () => {
     try {
-      const [chRes, stRes, setRes, usrRes, payRes] = await Promise.all([
+      const [chRes, stRes, setRes, usrRes, payRes, revRes, promoRes] = await Promise.all([
         fetch(`${API_URL}/channels`),
         fetch(`${API_URL}/admin/stats`, { headers }),
         fetch(`${API_URL}/admin/settings`, { headers }),
         fetch(`${API_URL}/admin/users`, { headers }),
-        fetch(`${API_URL}/admin/payments`, { headers })
+        fetch(`${API_URL}/admin/payments?status=${paymentFilter}`, { headers }),
+        fetch(`${API_URL}/admin/revenue`, { headers }),
+        fetch(`${API_URL}/admin/promos`, { headers })
       ]);
       if (chRes.ok) setChannels(await chRes.json());
       if (stRes.ok) setStats(await stRes.json());
       if (setRes.ok) setSettings(await setRes.json());
       if (usrRes.ok) setUsers(await usrRes.json());
       if (payRes.ok) setPayments(await payRes.json());
+      if (revRes.ok) setRevenue(await revRes.json());
+      if (promoRes.ok) setPromos(await promoRes.json());
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, [paymentFilter]);
 
   useEffect(() => {
     if (tg) {
@@ -255,6 +270,10 @@ export default function AdminView() {
           <div className="admin-tab-icon"><BarChart2 size={24} color={activeTab === 'stats' ? '#10b981' : '#a855f7'} /></div>
           <div className="admin-tab-label">Statistika</div>
         </div>
+        <div className={`admin-tab-item ${activeTab === 'promos' ? 'active' : ''}`} onClick={() => setActiveTab('promos')}>
+          <div className="admin-tab-icon"><Tag size={24} color={activeTab === 'promos' ? '#10b981' : '#f472b6'} /></div>
+          <div className="admin-tab-label">Promo</div>
+        </div>
         <div className={`admin-tab-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
           <div className="admin-tab-icon"><Settings size={24} color={activeTab === 'settings' ? '#10b981' : '#ef4444'} /></div>
           <div className="admin-tab-label">Sozlamalar</div>
@@ -275,6 +294,11 @@ export default function AdminView() {
                 <CreditCard size={24} style={{ color: '#4ade80', marginBottom: '5px' }} />
                 <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{stats.activeSubs}</div>
                 <div style={{ fontSize: '12px', opacity: 0.7 }}>Faol Obunalar</div>
+              </div>
+              <div className="card" style={{ padding: '15px', textAlign: 'center', gridColumn: 'span 2', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '5px' }}>💰 Jami Daromad</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{revenue.totalRevenue.toLocaleString('ru-RU')} UZS</div>
+                <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>{revenue.totalPayments} ta tasdiqlangan to'lov</div>
               </div>
             </div>
           </div>
@@ -331,13 +355,20 @@ export default function AdminView() {
 
         {activeTab === 'payments' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Kutayotgan To'lovlar</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>To'lovlar</h2>
               <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: '500' }}>{payments.length} ta</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto' }}>
+              {['PENDING', 'COMPLETED', 'CANCELLED', 'ALL'].map(f => (
+                <button key={f} onClick={() => setPaymentFilter(f)} style={{ padding: '6px 14px', borderRadius: '20px', border: paymentFilter === f ? '1px solid #3b82f6' : '1px solid #374151', background: paymentFilter === f ? 'rgba(59,130,246,0.15)' : 'transparent', color: paymentFilter === f ? '#3b82f6' : '#9ca3af', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {f === 'PENDING' ? '⏳ Kutayotgan' : f === 'COMPLETED' ? '✅ Tasdiqlangan' : f === 'CANCELLED' ? '❌ Bekor' : '📋 Hammasi'}
+                </button>
+              ))}
             </div>
             {payments.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
-                Kutayotgan to'lovlar yo'q
+                To'lovlar yo'q
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -346,14 +377,20 @@ export default function AdminView() {
                     <div className="user-card-top" style={{ borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
                       <div className="user-info">
                         <div className="user-name">{pay.user?.firstName || 'Ismsiz'} {pay.user?.username ? `(@${pay.user?.username})` : ''}</div>
-                        <div className="user-username" style={{ color: '#10b981', fontSize: '18px', fontWeight: 'bold', margin: '5px 0' }}>{pay.amount.toLocaleString('ru-RU')} UZS</div>
-                        <div style={{ fontSize: '13px', color: '#6b7280' }}>Tarif: {pay.plan?.name}</div>
+                        <div style={{ color: pay.status === 'COMPLETED' ? '#10b981' : pay.status === 'CANCELLED' ? '#ef4444' : '#f59e0b', fontSize: '18px', fontWeight: 'bold', margin: '5px 0' }}>{pay.amount.toLocaleString('ru-RU')} UZS</div>
+                        <div style={{ fontSize: '13px', color: '#6b7280' }}>Tarif: {pay.plan?.name}{pay.promoCode ? ` | Promo: ${pay.promoCode}` : ''}</div>
+                        <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px' }}>{new Date(pay.createdAt).toLocaleString('uz-UZ')}</div>
+                      </div>
+                      <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: pay.status === 'COMPLETED' ? 'rgba(16,185,129,0.15)' : pay.status === 'CANCELLED' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: pay.status === 'COMPLETED' ? '#10b981' : pay.status === 'CANCELLED' ? '#ef4444' : '#f59e0b' }}>
+                        {pay.status === 'COMPLETED' ? '✅' : pay.status === 'CANCELLED' ? '❌' : '⏳'}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                      <button onClick={() => handlePaymentAction(pay.id, 'confirm')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Tasdiqlash</button>
-                      <button onClick={() => handlePaymentAction(pay.id, 'reject')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer' }}>Bekor qilish</button>
-                    </div>
+                    {pay.status === 'PENDING' && (
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                        <button onClick={() => handlePaymentAction(pay.id, 'confirm')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>✅ Tasdiqlash</button>
+                        <button onClick={() => handlePaymentAction(pay.id, 'reject')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer' }}>❌ Bekor</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -496,6 +533,65 @@ export default function AdminView() {
                 <Plus size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> Qo'shish
               </button>
             </form>
+          </div>
+        )}
+
+        {activeTab === 'promos' && (
+          <div>
+            <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Promo-kodlar</h2>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const res = await fetch(`${API_URL}/admin/promos`, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({ code: newPromoCode, discountType: newPromoType, discountValue: newPromoValue, maxUses: newPromoMaxUses })
+                });
+                if (res.ok) {
+                  setNewPromoCode(''); setNewPromoValue(''); setNewPromoMaxUses('');
+                  fetchData();
+                } else alert('Xatolik');
+              } catch { alert('Xatolik'); }
+            }} className="card" style={{ padding: '20px', background: '#151a28', border: '1px solid #2a3441', borderRadius: '16px', marginBottom: '20px' }}>
+              <input className="admin-input" placeholder="Promo kod (masalan: SALE50)" value={newPromoCode} onChange={e => setNewPromoCode(e.target.value)} required style={{ textTransform: 'uppercase' }} />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <select className="admin-input" value={newPromoType} onChange={e => setNewPromoType(e.target.value)} style={{ background: '#111827', border: '1px solid #374151', color: '#fff' }}>
+                  <option value="percent">Foiz (%)</option>
+                  <option value="fixed">Summa (UZS)</option>
+                </select>
+                <input className="admin-input" type="number" placeholder="Qiymat" value={newPromoValue} onChange={e => setNewPromoValue(e.target.value)} required />
+              </div>
+              <input className="admin-input" type="number" placeholder="Maks ishlatilish (0 = cheksiz)" value={newPromoMaxUses} onChange={e => setNewPromoMaxUses(e.target.value)} />
+              <button type="submit" className="pay-btn" style={{ background: '#f472b6' }}>
+                <Plus size={16} style={{ display: 'inline', marginRight: '5px' }} /> Promo yaratish
+              </button>
+            </form>
+
+            {promos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>Promo-kodlar yo'q</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {promos.map(p => (
+                  <div key={p.id} className="user-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#f472b6' }}>{p.code}</div>
+                      <div style={{ fontSize: '13px', color: '#9ca3af' }}>
+                        {p.discountType === 'percent' ? `${p.discountValue}% chegirma` : `${p.discountValue.toLocaleString()} UZS chegirma`}
+                        {p.maxUses > 0 ? ` | ${p.usedCount}/${p.maxUses} ishlatilgan` : ` | ${p.usedCount} marta ishlatilgan`}
+                      </div>
+                    </div>
+                    <button onClick={async () => {
+                      if (!confirm('Bu promo-kodni o\'chirasizmi?')) return;
+                      await fetch(`${API_URL}/admin/promos/${p.id}`, { method: 'DELETE', headers });
+                      fetchData();
+                    }} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

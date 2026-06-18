@@ -46,7 +46,7 @@ app.get('/api/subscriptions/:userId', async (req, res) => {
 
 // Create manual payment with random suffix
 app.post('/api/create-payment', async (req, res) => {
-  const { channelId, planId, userId } = req.body;
+  const { channelId, planId, userId, promoCode } = req.body;
   
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
   if (!plan) return res.status(404).json({ error: "Plan not found" });
@@ -61,22 +61,48 @@ app.post('/api/create-payment', async (req, res) => {
       return res.json({ payment: existing });
     }
 
+    // Calculate price with promo code discount
+    let basePrice = plan.price;
+    let appliedPromo: string | null = null;
+
+    if (promoCode) {
+      const promo = await prisma.promoCode.findUnique({ where: { code: promoCode.toUpperCase() } });
+      if (promo && promo.active && (promo.maxUses === 0 || promo.usedCount < promo.maxUses)) {
+        if (promo.discountType === 'percent') {
+          basePrice = Math.round(basePrice * (1 - promo.discountValue / 100));
+        } else {
+          basePrice = Math.max(basePrice - promo.discountValue, 0);
+        }
+        appliedPromo = promo.code;
+
+        // Increment usage count
+        await prisma.promoCode.update({
+          where: { id: promo.id },
+          data: { usedCount: promo.usedCount + 1 }
+        });
+      }
+    }
+
     // Generate random suffix 1 to 99
     const randomSuffix = Math.floor(Math.random() * 99) + 1;
-    const finalAmount = plan.price + randomSuffix;
+    const finalAmount = basePrice + randomSuffix;
 
-    // Make sure this exact amount is not currently pending for someone else
-    // In a very busy system, we'd loop until we find a unique amount, but for now this is okay.
     const payment = await prisma.payment.create({
       data: {
         userId: String(userId),
         planId,
         amount: finalAmount,
-        status: 'PENDING'
+        status: 'PENDING',
+        promoCode: appliedPromo
       }
     });
 
-    res.json({ payment });
+    // Notify admin about new payment
+    const { notifyAdminNewPayment } = await import('./bot.js');
+    const user = await prisma.user.findUnique({ where: { id: String(userId) } });
+    await notifyAdminNewPayment(payment, user || { firstName: 'Noma\'lum', username: null }, plan);
+
+    res.json({ payment, discount: appliedPromo ? true : false });
   } catch (err) {
     console.error("Payment Error:", err);
     res.status(500).json({ error: "Failed to create payment" });
@@ -248,16 +274,92 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
   }
 });
 
-// Get pending payments
+// Get payments (with optional status filter)
 app.get('/api/admin/payments', requireAdmin, async (req, res) => {
   try {
+    const status = req.query.status as string | undefined;
+    const where = status && status !== 'ALL' ? { status } : {};
     const payments = await prisma.payment.findMany({
-      where: { status: 'PENDING' },
-      include: { user: true, plan: true }
+      where,
+      include: { user: true, plan: true },
+      orderBy: { createdAt: 'desc' }
     });
     res.json(payments);
   } catch (err) {
     res.status(500).json({ error: 'Failed to get payments' });
+  }
+});
+
+// Get revenue stats
+app.get('/api/admin/revenue', requireAdmin, async (req, res) => {
+  try {
+    const completedPayments = await prisma.payment.findMany({
+      where: { status: 'COMPLETED' }
+    });
+    const totalRevenue = completedPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalPayments = completedPayments.length;
+    res.json({ totalRevenue, totalPayments });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get revenue' });
+  }
+});
+
+// === Promo Code CRUD ===
+app.get('/api/admin/promos', requireAdmin, async (req, res) => {
+  try {
+    const promos = await prisma.promoCode.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(promos);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get promos' });
+  }
+});
+
+app.post('/api/admin/promos', requireAdmin, async (req, res) => {
+  const { code, discountType, discountValue, maxUses } = req.body;
+  try {
+    const promo = await prisma.promoCode.create({
+      data: {
+        code: code.toUpperCase(),
+        discountType: discountType || 'percent',
+        discountValue: Number(discountValue),
+        maxUses: Number(maxUses) || 0
+      }
+    });
+    res.json(promo);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create promo' });
+  }
+});
+
+app.delete('/api/admin/promos/:id', requireAdmin, async (req, res) => {
+  try {
+    await prisma.promoCode.delete({ where: { id: Number(req.params.id) } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete promo' });
+  }
+});
+
+// Validate promo code (public)
+app.post('/api/validate-promo', async (req, res) => {
+  const { code, planId } = req.body;
+  try {
+    const promo = await prisma.promoCode.findUnique({ where: { code: code.toUpperCase() } });
+    if (!promo || !promo.active || (promo.maxUses > 0 && promo.usedCount >= promo.maxUses)) {
+      return res.json({ valid: false });
+    }
+    const plan = await prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) return res.json({ valid: false });
+
+    let discountedPrice = plan.price;
+    if (promo.discountType === 'percent') {
+      discountedPrice = Math.round(plan.price * (1 - promo.discountValue / 100));
+    } else {
+      discountedPrice = Math.max(plan.price - promo.discountValue, 0);
+    }
+    res.json({ valid: true, discountedPrice, discountType: promo.discountType, discountValue: promo.discountValue });
+  } catch (err) {
+    res.status(500).json({ valid: false });
   }
 });
 
