@@ -60,7 +60,15 @@ app.post('/api/create-payment', async (req, res) => {
     });
 
     if (existing) {
-      return res.json({ payment: existing });
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      if (existing.createdAt < threeMinutesAgo) {
+        await prisma.payment.update({
+          where: { id: existing.id },
+          data: { status: 'CANCELLED' }
+        });
+      } else {
+        return res.json({ payment: existing });
+      }
     }
 
     // Calculate price with promo code discount
