@@ -54,7 +54,7 @@ app.post('/api/create-payment', async (req, res) => {
   try {
     // Check if user already has a pending payment for this plan to avoid creating duplicates needlessly
     const existing = await prisma.payment.findFirst({
-      where: { userId, planId, status: 'PENDING' }
+      where: { userId: String(userId), planId, status: 'PENDING' }
     });
 
     if (existing) {
@@ -69,7 +69,7 @@ app.post('/api/create-payment', async (req, res) => {
     // In a very busy system, we'd loop until we find a unique amount, but for now this is okay.
     const payment = await prisma.payment.create({
       data: {
-        userId,
+        userId: String(userId),
         planId,
         amount: finalAmount,
         status: 'PENDING'
