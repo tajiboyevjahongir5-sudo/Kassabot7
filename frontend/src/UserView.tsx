@@ -110,35 +110,44 @@ function UserView() {
 
   return (
     <>
+      <div className="aurora-bg"></div>
       <header>
-        <h1>Premium Obuna</h1>
-        <p>Yopiq guruhlar va maxsus materiallarga kirish</p>
+        <div className="logo-text">kassa bot</div>
+        <div className="header-controls">
+          <div className="icon-btn">✨</div>
+          <div className="icon-btn">✕</div>
+        </div>
       </header>
+
+      <div className="title-container">
+        <h1 className="gradient-title">Premium Obuna</h1>
+        <p className="subtitle">Yopiq guruhlar va maxsus materiallarga kirish</p>
+      </div>
 
       <main>
         {activePayment ? (
-          <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
-            <h2 style={{ color: 'var(--accent)', marginBottom: '15px' }}>To'lov qilish</h2>
+          <div className="cyber-card" style={{ padding: '20px', textAlign: 'center' }}>
+            <h2 className="gradient-title" style={{ fontSize: '22px', marginBottom: '15px' }}>To'lov qilish</h2>
             <p style={{ marginBottom: '15px', fontSize: '14px', opacity: 0.9 }}>
               Iltimos, quyidagi karta raqamiga <b>aynan</b> ko'rsatilgan summani o'tkazing. Agar 1 tiyin kam yoki ko'p bo'lsa tizim avtomat qabul qilmaydi!
             </p>
             
-            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
-              <div style={{ fontSize: '12px', opacity: 0.6 }}>Karta raqami:</div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '1px', userSelect: 'all' }}>
+            <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Karta raqami:</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px', userSelect: 'all', color: '#fff', marginTop: '4px' }}>
                 {cardNumber || "Admin karta kiritmagan!"}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid var(--accent)' }}>
-              <div style={{ fontSize: '12px', opacity: 0.6 }}>To'lanadigan summa (UZS):</div>
-              <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--accent)', userSelect: 'all' }}>
+            <div style={{ background: 'rgba(176, 38, 255, 0.1)', border: '1px solid var(--accent)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--accent)' }}>To'lanadigan summa (UZS):</div>
+              <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff', userSelect: 'all', textShadow: '0 0 10px rgba(176, 38, 255, 0.5)' }}>
                 {activePayment.amount.toLocaleString('ru-RU')}
               </div>
             </div>
 
             <button 
-              className="pay-btn" 
+              className="neon-btn" 
               onClick={() => {
                 if (tg) {
                   tg.showAlert("To'lov qilganingizdan so'ng bot sizga avtomatik ravishda yopiq kanal havolasini yuboradi. Kuting...");
@@ -160,20 +169,23 @@ function UserView() {
         ) : (
           <>
             {channels.length === 0 ? (
-              <div className="card" style={{ textAlign: 'center' }}>
+              <div className="cyber-card" style={{ textAlign: 'center' }}>
                 <p>Hozircha obunalar mavjud emas.</p>
               </div>
             ) : (
               <div className="channels">
                 {channels.map((channel) => (
-                  <div key={channel.id} className="card">
+                  <div key={channel.id} className="cyber-card">
                     <div className="channel-header">
-                      <div className="channel-icon">
-                        <Crown size={24} />
+                      <div className="glass-icon">
+                        <Crown size={28} color="#fff" />
                       </div>
-                      <div className="channel-info">
-                        <h2>{channel.title}</h2>
-                        <p><Lock size={12} style={{ display: 'inline', marginRight: 4 }} />Yopiq hamjamiyat</p>
+                      <div className="channel-info" style={{ flex: 1 }}>
+                        <h2 style={{ color: '#fff' }}>{channel.title}</h2>
+                        <p><Lock size={12} color="var(--text-muted)" /> Yopiq hamjamiyat</p>
+                      </div>
+                      <div className="icon-btn" style={{ width: 32, height: 32 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                       </div>
                     </div>
 
@@ -181,7 +193,7 @@ function UserView() {
                       {channel.plans.map((plan) => (
                         <div 
                           key={plan.id}
-                          className={`plan-item ${selectedPlan === plan.id ? 'selected' : ''}`}
+                          className={`plan-item ${selectedPlan === plan.id ? 'selected' : 'unselected'}`}
                           onClick={() => {
                             setSelectedPlan(plan.id);
                             setSelectedChannel(channel.id);
@@ -194,7 +206,7 @@ function UserView() {
                           <div className="plan-price">
                             {plan.price.toLocaleString('ru-RU')} UZS
                             {selectedPlan === plan.id && (
-                              <CheckCircle2 size={18} color="var(--accent)" style={{ marginLeft: 8 }} />
+                              <CheckCircle2 size={20} color="#00ff66" style={{ marginLeft: 4, filter: 'drop-shadow(0 0 5px #00ff66)' }} />
                             )}
                           </div>
                         </div>
@@ -205,40 +217,40 @@ function UserView() {
               </div>
             )}
 
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #374151', background: '#111827', color: '#fff', fontSize: '14px', textTransform: 'uppercase' }}
-                  placeholder="Promo-kod (ixtiyoriy)"
-                  value={promoCode}
-                  onChange={e => { setPromoCode(e.target.value); setPromoStatus(null); }}
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!promoCode || !selectedPlan) return;
-                    try {
-                      const res = await fetch(`${API_URL}/validate-promo`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code: promoCode, planId: selectedPlan })
-                      });
-                      const data = await res.json();
-                      if (data.valid) {
-                        setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS`);
-                      } else {
-                        setPromoStatus('❌ Promo-kod noto\'g\'ri yoki muddati tugagan');
-                      }
-                    } catch { setPromoStatus('❌ Tekshirishda xatolik'); }
-                  }}
-                  style={{ padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >Tekshir</button>
-              </div>
-              {promoStatus && <div style={{ fontSize: '13px', marginTop: '6px', color: promoStatus.startsWith('✅') ? '#10b981' : '#ef4444' }}>{promoStatus}</div>}
+            <div className="promo-container">
+              <input
+                className="cyber-input"
+                placeholder="PROMO-KOD (IXTIYORIY)"
+                value={promoCode}
+                onChange={e => { setPromoCode(e.target.value); setPromoStatus(null); }}
+              />
+              <button
+                type="button"
+                className="btn-small-glow"
+                onClick={async () => {
+                  if (!promoCode || !selectedPlan) return;
+                  try {
+                    const res = await fetch(`${API_URL}/validate-promo`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ code: promoCode, planId: selectedPlan })
+                    });
+                    const data = await res.json();
+                    if (data.valid) {
+                      setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS`);
+                    } else {
+                      setPromoStatus('❌ Promo-kod noto\'g\'ri yoki muddati tugagan');
+                    }
+                  } catch { setPromoStatus('❌ Tekshirishda xatolik'); }
+                }}
+              >
+                <CheckCircle2 size={16} /> Tekshir
+              </button>
             </div>
+            {promoStatus && <div style={{ fontSize: '13px', marginTop: '-14px', marginBottom: '20px', padding: '0 4px', color: promoStatus.startsWith('✅') ? 'var(--accent-green)' : 'var(--accent-red)', textShadow: '0 0 10px rgba(0,0,0,0.5)' }}>{promoStatus}</div>}
 
             <button 
-              className="pay-btn" 
+              className="neon-btn" 
               disabled={!selectedPlan || paying || channels.length === 0}
               onClick={handlePay}
             >
@@ -247,6 +259,10 @@ function UserView() {
           </>
         )}
       </main>
+
+      <div className="tag-bottom">
+        <div className="pill-tag">@KanalKassaBot</div>
+      </div>
     </>
   );
 }

@@ -240,47 +240,58 @@ export default function AdminView() {
   }
 
   return (
-    <div style={{ backgroundColor: '#0b0f19', minHeight: '100vh', padding: '20px', fontFamily: 'sans-serif', color: '#fff' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #1f2937' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#fff' }}>Admin Panel</h1>
-        <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', display: 'flex', alignItems: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-          <div style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', marginRight: '6px' }}></div>
-          Admin
+    <>
+      <div className="aurora-bg"></div>
+      <header>
+        <div className="logo-text">kassa bot</div>
+        <div className="header-controls">
+          <div className="pill-tag" style={{ border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', background: 'rgba(0,240,255,0.1)', padding: '8px 16px' }}>Admin Panel</div>
+          <div className="icon-btn">✨</div>
+          <div className="icon-btn">✕</div>
         </div>
       </header>
 
+      <div className="cyber-card" style={{ padding: '20px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 className="gradient-title" style={{ fontSize: '20px', margin: 0 }}>Admin Panel</h2>
+          <div style={{ background: 'rgba(0, 255, 102, 0.1)', color: 'var(--accent-green)', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', display: 'flex', alignItems: 'center', border: '1px solid rgba(0, 255, 102, 0.2)' }}>
+            <div style={{ width: '6px', height: '6px', background: 'var(--accent-green)', borderRadius: '50%', marginRight: '6px', boxShadow: '0 0 5px var(--accent-green)' }}></div>
+            Admin
+          </div>
+        </div>
+
       <div className="admin-tabs">
         <div className={`admin-tab-item ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>
-          <div className="admin-tab-icon"><CreditCard size={24} color={activeTab === 'payments' ? '#10b981' : '#3b82f6'} /></div>
+          <div className="admin-tab-icon"><CreditCard size={24} color={activeTab === 'payments' ? 'var(--accent-cyan)' : 'var(--accent)'} /></div>
           <div className="admin-tab-label">To'lovlar</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'broadcast' ? 'active' : ''}`} onClick={() => setActiveTab('broadcast')}>
-          <div className="admin-tab-icon"><Send size={24} color={activeTab === 'broadcast' ? '#10b981' : '#f59e0b'} /></div>
+          <div className="admin-tab-icon"><Send size={24} color={activeTab === 'broadcast' ? 'var(--accent-cyan)' : '#f59e0b'} /></div>
           <div className="admin-tab-label">Xabarnoma</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'channels' ? 'active' : ''}`} onClick={() => setActiveTab('channels')}>
-          <div className="admin-tab-icon"><Box size={24} color={activeTab === 'channels' ? '#10b981' : '#eab308'} /></div>
+          <div className="admin-tab-icon"><Box size={24} color={activeTab === 'channels' ? 'var(--accent-cyan)' : '#eab308'} /></div>
           <div className="admin-tab-label">Kanal +</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-          <div className="admin-tab-icon"><Users size={24} color={activeTab === 'users' ? '#10b981' : '#10b981'} /></div>
+          <div className="admin-tab-icon"><Users size={24} color={activeTab === 'users' ? 'var(--accent-cyan)' : '#10b981'} /></div>
           <div className="admin-tab-label">Foydalanuvchilar</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
-          <div className="admin-tab-icon"><BarChart2 size={24} color={activeTab === 'stats' ? '#10b981' : '#a855f7'} /></div>
+          <div className="admin-tab-icon"><BarChart2 size={24} color={activeTab === 'stats' ? 'var(--accent-cyan)' : '#a855f7'} /></div>
           <div className="admin-tab-label">Statistika</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'promos' ? 'active' : ''}`} onClick={() => setActiveTab('promos')}>
-          <div className="admin-tab-icon"><Tag size={24} color={activeTab === 'promos' ? '#10b981' : '#f472b6'} /></div>
+          <div className="admin-tab-icon"><Tag size={24} color={activeTab === 'promos' ? 'var(--accent-cyan)' : '#f472b6'} /></div>
           <div className="admin-tab-label">Promo</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-          <div className="admin-tab-icon"><Settings size={24} color={activeTab === 'settings' ? '#10b981' : '#ef4444'} /></div>
+          <div className="admin-tab-icon"><Settings size={24} color={activeTab === 'settings' ? 'var(--accent-cyan)' : '#ef4444'} /></div>
           <div className="admin-tab-label">Sozlamalar</div>
         </div>
       </div>
 
-      <main style={{ paddingBottom: '80px' }}>
+      <main>
         {activeTab === 'stats' && (
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Statistika</h2>
@@ -355,41 +366,65 @@ export default function AdminView() {
 
         {activeTab === 'payments' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>To'lovlar</h2>
-              <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: '500' }}>{payments.length} ta</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                To'lovlar <span style={{ width: '60px', height: '2px', background: 'linear-gradient(90deg, var(--accent-cyan), transparent)' }}></span>
+              </h2>
+              <span style={{ color: 'var(--accent-cyan)', fontSize: '14px', fontWeight: '500' }}>{payments.length} ta</span>
             </div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto' }}>
-              {['PENDING', 'COMPLETED', 'CANCELLED', 'ALL'].map(f => (
-                <button key={f} onClick={() => setPaymentFilter(f)} style={{ padding: '6px 14px', borderRadius: '20px', border: paymentFilter === f ? '1px solid #3b82f6' : '1px solid #374151', background: paymentFilter === f ? 'rgba(59,130,246,0.15)' : 'transparent', color: paymentFilter === f ? '#3b82f6' : '#9ca3af', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {f === 'PENDING' ? '⏳ Kutayotgan' : f === 'COMPLETED' ? '✅ Tasdiqlangan' : f === 'CANCELLED' ? '❌ Bekor' : '📋 Hammasi'}
-                </button>
-              ))}
+            
+            <div className="filter-pills">
+              <button className={`filter-pill ${paymentFilter === 'PENDING' ? 'active' : ''}`} onClick={() => setPaymentFilter('PENDING')}>
+                ⏳ Kutayotgan
+              </button>
+              <button className={`filter-pill ${paymentFilter === 'COMPLETED' ? 'active' : ''}`} onClick={() => setPaymentFilter('COMPLETED')}>
+                ✅ Tasdiqlangan
+              </button>
+              <button className={`filter-pill ${paymentFilter === 'CANCELLED' ? 'active' : ''}`} onClick={() => setPaymentFilter('CANCELLED')}>
+                ❌ Bekor
+              </button>
+              <button className={`filter-pill ${paymentFilter === 'ALL' ? 'active' : ''}`} onClick={() => setPaymentFilter('ALL')}>
+                📋 Hammasi
+              </button>
             </div>
+
             {payments.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
                 To'lovlar yo'q
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {payments.map(pay => (
-                  <div key={pay.id} className="user-card">
-                    <div className="user-card-top" style={{ borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
-                      <div className="user-info">
-                        <div className="user-name">{pay.user?.firstName || 'Ismsiz'} {pay.user?.username ? `(@${pay.user?.username})` : ''}</div>
-                        <div style={{ color: pay.status === 'COMPLETED' ? '#10b981' : pay.status === 'CANCELLED' ? '#ef4444' : '#f59e0b', fontSize: '18px', fontWeight: 'bold', margin: '5px 0' }}>{pay.amount.toLocaleString('ru-RU')} UZS</div>
-                        <div style={{ fontSize: '13px', color: '#6b7280' }}>Tarif: {pay.plan?.name}{pay.promoCode ? ` | Promo: ${pay.promoCode}` : ''}</div>
-                        <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px' }}>{new Date(pay.createdAt).toLocaleString('uz-UZ')}</div>
-                      </div>
-                      <div style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: pay.status === 'COMPLETED' ? 'rgba(16,185,129,0.15)' : pay.status === 'CANCELLED' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: pay.status === 'COMPLETED' ? '#10b981' : pay.status === 'CANCELLED' ? '#ef4444' : '#f59e0b' }}>
-                        {pay.status === 'COMPLETED' ? '✅' : pay.status === 'CANCELLED' ? '❌' : '⏳'}
-                      </div>
+                  <div key={pay.id} className="payment-card">
+                    <div className="pay-user">
+                      {pay.user?.firstName || 'Ismsiz'} {pay.user?.username ? <span style={{ color: 'var(--text-muted)' }}>(@{pay.user?.username})</span> : ''}
                     </div>
+                    <div className="pay-amount">{pay.amount.toLocaleString('ru-RU')} UZS</div>
+                    <div className="pay-desc">
+                      {pay.plan?.name} {pay.promoCode ? `| Promo: ${pay.promoCode}` : ''} <br/>
+                      {new Date(pay.createdAt).toLocaleString('uz-UZ')}
+                    </div>
+                    
                     {pay.status === 'PENDING' && (
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                        <button onClick={() => handlePaymentAction(pay.id, 'confirm')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>✅ Tasdiqlash</button>
-                        <button onClick={() => handlePaymentAction(pay.id, 'reject')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer' }}>❌ Bekor</button>
+                      <div className="action-buttons">
+                        <button className="btn-confirm" onClick={() => handlePaymentAction(pay.id, 'confirm')}>
+                          ✅ Tasdiqlash
+                        </button>
+                        <button className="btn-reject" onClick={() => handlePaymentAction(pay.id, 'reject')}>
+                          ❌ Bekor
+                        </button>
                       </div>
+                    )}
+                    {pay.status !== 'PENDING' && (
+                       <div style={{ marginTop: '16px', zIndex: 2, position: 'relative' }}>
+                         <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', 
+                           background: pay.status === 'COMPLETED' ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 0, 85, 0.1)',
+                           color: pay.status === 'COMPLETED' ? 'var(--accent-green)' : 'var(--accent-red)',
+                           border: `1px solid ${pay.status === 'COMPLETED' ? 'rgba(0, 255, 102, 0.3)' : 'rgba(255, 0, 85, 0.3)'}`
+                         }}>
+                           {pay.status === 'COMPLETED' ? '✅ Tasdiqlangan' : '❌ Bekor qilingan'}
+                         </span>
+                       </div>
                     )}
                   </div>
                 ))}
@@ -595,6 +630,11 @@ export default function AdminView() {
           </div>
         )}
       </main>
-    </div>
+      </div>
+
+      <div className="tag-bottom">
+        <div className="pill-tag">@KanalKassaBot</div>
+      </div>
+    </>
   );
 }
