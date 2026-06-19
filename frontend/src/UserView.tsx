@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Crown, Lock, CheckCircle2 } from 'lucide-react';
+import { Crown, Lock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import './index.css';
 
 // TypeScript interfaces
@@ -31,6 +31,8 @@ function UserView() {
   const [cardNumber, setCardNumber] = useState<string>('');
   const [promoCode, setPromoCode] = useState('');
   const [promoStatus, setPromoStatus] = useState<string | null>(null);
+  const [complaintSent, setComplaintSent] = useState(false);
+  const [complaintLoading, setComplaintLoading] = useState(false);
 
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -224,9 +226,69 @@ function UserView() {
             </button>
             <button 
               style={{ marginTop: '15px', background: 'transparent', border: 'none', color: 'var(--text-main)', opacity: 0.6, cursor: 'pointer' }}
-              onClick={() => setActivePayment(null)}
+              onClick={() => { setActivePayment(null); setComplaintSent(false); }}
             >
               {timeLeft === 0 ? "Ortga qaytish" : "Bekor qilish"}
+            </button>
+
+            {/* Complaint Button */}
+            <button
+              style={{
+                marginTop: '12px',
+                background: complaintSent ? 'rgba(0, 255, 102, 0.08)' : 'rgba(255, 0, 85, 0.06)',
+                border: complaintSent ? '1px solid rgba(0, 255, 102, 0.25)' : '1px solid rgba(255, 0, 85, 0.2)',
+                color: complaintSent ? 'var(--accent-green)' : 'var(--accent-red)',
+                padding: '10px 16px',
+                borderRadius: '10px',
+                cursor: complaintSent || complaintLoading ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                opacity: complaintSent ? 0.7 : 1,
+                transition: 'all 0.3s ease',
+                width: '100%',
+              }}
+              disabled={complaintSent || complaintLoading}
+              onClick={async () => {
+                setComplaintLoading(true);
+                try {
+                  const userId = tg?.initDataUnsafe?.user?.id || 'unknown';
+                  const res = await fetch(`${API_URL}/complaint`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      userId: String(userId),
+                      paymentId: activePayment.id,
+                      amount: activePayment.amount
+                    })
+                  });
+                  if (res.ok) {
+                    setComplaintSent(true);
+                  } else {
+                    const data = await res.json();
+                    if (res.status === 429) {
+                      setComplaintSent(true);
+                    } else {
+                      alert(data.error || "Xatolik yuz berdi");
+                    }
+                  }
+                } catch {
+                  alert("Tarmoq xatoligi. Qaytadan urinib ko'ring.");
+                } finally {
+                  setComplaintLoading(false);
+                }
+              }}
+            >
+              {complaintSent ? (
+                <><CheckCircle2 size={14} /> Shikoyat yuborildi</>  
+              ) : complaintLoading ? (
+                <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}></div> Yuborilmoqda...</>
+              ) : (
+                <><AlertTriangle size={14} /> To'lov tushmadimi? Shikoyat qilish</>  
+              )}
             </button>
           </div>
         ) : (

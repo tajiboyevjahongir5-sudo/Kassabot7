@@ -60,8 +60,8 @@ app.post('/api/create-payment', async (req, res) => {
     });
 
     if (existing) {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-      if (existing.createdAt < threeMinutesAgo) {
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      if (existing.createdAt < fifteenMinutesAgo) {
         await prisma.payment.update({
           where: { id: existing.id },
           data: { status: 'CANCELLED' }
@@ -105,7 +105,7 @@ app.post('/api/create-payment', async (req, res) => {
     const maxAttempts = 100;
 
     while (attempts < maxAttempts) {
-      const testSuffix = Math.floor(Math.random() * 99) + 1;
+      const testSuffix = Math.floor(Math.random() * 900) + 100;
       const testAmount = basePrice + testSuffix;
       if (!busyAmounts.has(testAmount)) {
         randomSuffix = testSuffix;
@@ -115,7 +115,7 @@ app.post('/api/create-payment', async (req, res) => {
     }
 
     if (randomSuffix === 0) {
-      randomSuffix = Math.floor(Math.random() * 99) + 1;
+      randomSuffix = Math.floor(Math.random() * 900) + 100;
     }
 
     const finalAmount = basePrice + randomSuffix;
@@ -509,6 +509,41 @@ app.get('/api/settings', async (req, res) => {
     res.json({ cardNumber: settings.cardNumber });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
+const complaints = new Set<string>();
+
+app.post('/api/complaint', async (req, res) => {
+  const { userId, paymentId, amount } = req.body;
+  if (!userId || !paymentId || !amount) {
+    return res.status(400).json({ error: "Noto'g'ri ma'lumotlar!" });
+  }
+
+  const key = `${userId}_${paymentId}`;
+  if (complaints.has(key)) {
+    return res.status(429).json({ error: "Siz ushbu to'lov bo'yicha allaqachon shikoyat yuborgansiz!" });
+  }
+  complaints.add(key);
+
+  try {
+    const adminId = process.env.ADMIN_ID;
+    if (adminId) {
+      const dateStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" });
+      const message = 
+        `📞 Shikoyat!\n` +
+        `👤 Foydalanuvchi: ${userId}\n` +
+        `💰 To'langan summa: ${amount} UZS\n` +
+        `🆔 To'lov ID: #${paymentId}\n` +
+        `⏰ Vaqt: ${dateStr}\n\n` +
+        `Foydalanuvchi to'lov tushmaganligidan shikoyat qilmoqda.`;
+      
+      await bot.telegram.sendMessage(adminId, message);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Complaint error:", err);
+    res.status(500).json({ error: "Shikoyat yuborishda xatolik yuz berdi" });
   }
 });
 

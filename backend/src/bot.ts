@@ -100,6 +100,25 @@ bot.command('help', async (ctx) => {
 
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
 
+function extractNumbers(text: string): number[] {
+  // Remove decimal .00
+  let temp = text.replace(/\.00\b/g, '');
+  
+  // Match candidate numbers (digits optionally separated by spaces, commas or dots)
+  const matches = temp.match(/\b\d+(?:[\s,.]\d+)*\b/g) || [];
+  const results: number[] = [];
+  for (const m of matches) {
+    const cleanVal = m.replace(/[\s,.]/g, '');
+    const num = parseInt(cleanVal, 10);
+    if (!isNaN(num)) {
+      results.push(num);
+    }
+  }
+  return results;
+}
+
+// ============ CHANNEL POST LISTENER (Auto-verify payments) ============
+
 bot.on('channel_post', async (ctx) => {
   const channelId = ctx.chat.id.toString();
   
@@ -111,37 +130,51 @@ bot.on('channel_post', async (ctx) => {
   const text = (ctx.channelPost as any).text || "";
   if (!text) return;
 
-  const normalizedText = text.replace(/[\s,]/g, '');
-
   const pendingPayments = await prisma.payment.findMany({ 
     where: { status: 'PENDING' },
     include: { plan: true, user: true }
   });
 
-  for (const payment of pendingPayments) {
-    const amountStr = payment.amount.toString();
-    const regex = new RegExp('(^|\\D)' + amountStr + '(\\D|$)');
-    
-    if (regex.test(normalizedText)) {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'COMPLETED' }
-      });
+  const extractedNumbers = extractNumbers(text);
+  const exactMatches: any[] = [];
+  const closeMatches: any[] = [];
 
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+  for (const num of extractedNumbers) {
+    for (const payment of pendingPayments) {
+      if (payment.amount === num) {
+        exactMatches.push(payment);
+      } else if (Math.abs(payment.amount - num) <= 500) {
+        closeMatches.push({ payment, foundAmount: num, expectedAmount: payment.amount });
+      }
+    }
+  }
 
-      await prisma.subscription.create({
-        data: {
-          userId: payment.userId,
-          channelId: payment.plan.channelId,
-          expiresAt: expiresAt,
-          status: 'ACTIVE'
-        }
-      });
+  if (exactMatches.length > 0) {
+    // Process exact matches
+    const uniqueExactMatches = exactMatches.filter((p, index, self) => 
+      self.findIndex(t => t.id === p.id) === index
+    );
 
+    for (const payment of uniqueExactMatches) {
       try {
-        const inviteLink = await ctx.telegram.createChatInviteLink(payment.plan.channelId, {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: 'COMPLETED' }
+        });
+
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+
+        await prisma.subscription.create({
+          data: {
+            userId: payment.userId,
+            channelId: payment.plan.channelId,
+            expiresAt: expiresAt,
+            status: 'ACTIVE'
+          }
+        });
+
+        const inviteLink = await bot.telegram.createChatInviteLink(payment.plan.channelId, {
           member_limit: 1,
           expire_date: Math.floor(Date.now() / 1000) + 7 * 86400,
         });
@@ -151,14 +184,42 @@ bot.on('channel_post', async (ctx) => {
           `✅ To'lovingiz (${payment.amount} so'm) tasdiqlandi!\n\nKanalga kirish uchun maxsus havola (faqat siz uchun, uni boshqalarga bermang):\n${inviteLink.invite_link}`
         );
       } catch (err) {
-        console.error("Create link error:", err);
+        console.error("Auto confirmation error for payment ID " + payment.id + ":", err);
+        try {
+          await bot.telegram.sendMessage(
+            payment.userId, 
+            `✅ To'lovingiz tasdiqlandi, lekin kanalga havola yaratishda xatolik yuz berdi. Iltimos, adminga murojaat qiling.`
+          );
+        } catch (e) {}
+      }
+    }
+  } else if (closeMatches.length > 0) {
+    // Process close matches
+    const uniqueCloseMatches = closeMatches.filter((m, index, self) => 
+      self.findIndex(t => t.payment.id === m.payment.id) === index
+    );
+
+    const adminId = process.env.ADMIN_ID;
+
+    for (const match of uniqueCloseMatches) {
+      const payment = match.payment;
+      const foundAmount = match.foundAmount;
+      const expectedAmount = match.expectedAmount;
+      const usernameVal = payment.user?.username ? payment.user.username : 'yo\'q';
+
+      // Notify admin
+      if (adminId) {
         await bot.telegram.sendMessage(
-          payment.userId, 
-          `✅ To'lovingiz tasdiqlandi, lekin kanalga havola yaratishda xatolik yuz berdi. Iltimos, adminga murojaat qiling.`
-        );
+          adminId,
+          `⚠️ Noto'g'ri summa keldi! Kimdir ${foundAmount} to'ladi, lekin kutilgan summa ${expectedAmount} edi. To'lov ID: #${payment.id}. Foydalanuvchi: @${usernameVal}`
+        ).catch(e => console.error("Admin notification error:", e));
       }
 
-      break;
+      // Notify user
+      await bot.telegram.sendMessage(
+        payment.userId,
+        `❌ To'lovingiz ${foundAmount} so'm bo'lib keldi, lekin biz ${expectedAmount} so'm kutgandik. Iltimos, adminga murojaat qiling yoki qaytadan urinib ko'ring.`
+      ).catch(e => console.error("User warning notification error:", e));
     }
   }
 });
@@ -344,16 +405,16 @@ export function startExpiryWarningCron() {
   }, 6 * 60 * 60 * 1000); // Every 6 hours
 }
 
-// 3. Auto-cancel payments older than 3 minutes (every 1 minute)
+// 3. Auto-cancel payments older than 15 minutes (every 1 minute)
 export function startPaymentTimeoutCron() {
   setInterval(async () => {
     try {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
 
       const expiredPayments = await prisma.payment.findMany({
         where: {
           status: 'PENDING',
-          createdAt: { lt: threeMinutesAgo }
+          createdAt: { lt: fifteenMinutesAgo }
         }
       });
 
@@ -361,7 +422,7 @@ export function startPaymentTimeoutCron() {
         await prisma.payment.updateMany({
           where: {
             status: 'PENDING',
-            createdAt: { lt: threeMinutesAgo }
+            createdAt: { lt: fifteenMinutesAgo }
           },
           data: { status: 'CANCELLED' }
         });
@@ -371,12 +432,12 @@ export function startPaymentTimeoutCron() {
           try {
             await bot.telegram.sendMessage(
               pay.userId,
-              `⏰ To'lov muddati tugadi (3 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
+              `⏰ To'lov muddati tugadi (15 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
             );
           } catch (err) {} // user blocked bot
         }
 
-        console.log(`[CRON] ${expiredPayments.length} ta to'lov 3 daqiqadan oshgani uchun bekor qilindi.`);
+        console.log(`[CRON] ${expiredPayments.length} ta to'lov 15 daqiqadan oshgani uchun bekor qilindi.`);
       }
     } catch (err) {
       console.error('[CRON] Payment timeout error:', err);
