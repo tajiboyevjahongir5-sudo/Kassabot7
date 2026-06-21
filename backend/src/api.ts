@@ -431,7 +431,11 @@ app.post('/api/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
 
     // Create subscription
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+    if (payment.plan.duration === 0) {
+      expiresAt.setFullYear(expiresAt.getFullYear() + 100);
+    } else {
+      expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+    }
 
     await prisma.subscription.create({
       data: {

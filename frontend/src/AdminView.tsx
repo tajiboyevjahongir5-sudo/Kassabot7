@@ -59,6 +59,7 @@ export default function AdminView() {
   const [newPlanDesc, setNewPlanDesc] = useState('');
   const [newPlanPrice, setNewPlanPrice] = useState('');
   const [newPlanDuration, setNewPlanDuration] = useState('30');
+  const [isLifetime, setIsLifetime] = useState(false);
 
   const headers = {
     'Content-Type': 'application/json',
@@ -139,7 +140,7 @@ export default function AdminView() {
 
   const handleAddPlan = async (e: React.FormEvent, channelId: string) => {
     e.preventDefault();
-    if (!newPlanName || !newPlanPrice || !newPlanDuration) return;
+    if (!newPlanName || !newPlanPrice || (!newPlanDuration && !isLifetime)) return;
 
     try {
       const res = await fetch(`${API_URL}/admin/channels/${channelId}/plans`, {
@@ -149,7 +150,7 @@ export default function AdminView() {
           name: newPlanName,
           description: newPlanDesc,
           price: Number(newPlanPrice),
-          duration: Number(newPlanDuration)
+          duration: isLifetime ? 0 : Number(newPlanDuration)
         })
       });
       if (res.ok) {
@@ -158,6 +159,7 @@ export default function AdminView() {
         setNewPlanDesc('');
         setNewPlanPrice('');
         setNewPlanDuration('30');
+        setIsLifetime(false);
         fetchData();
       } else {
         alert('Failed to add plan');
@@ -741,7 +743,7 @@ export default function AdminView() {
                       <div key={plan.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(20, 22, 35, 0.6)', padding: '12px 16px', borderRadius: '12px', marginBottom: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <div>
                           <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#fff' }}>{plan.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--accent)' }}>{plan.price.toLocaleString('ru-RU')} UZS / {plan.duration} kun</div>
+                          <div style={{ fontSize: '12px', color: 'var(--accent)' }}>{plan.price.toLocaleString('ru-RU')} UZS / {plan.duration === 0 ? 'Butun umrlik' : `${plan.duration} kun`}</div>
                         </div>
                         <button onClick={() => handleDeletePlan(plan.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                           <Trash2 size={16} />
@@ -764,19 +766,30 @@ export default function AdminView() {
                           placeholder="Ta'rif (masalan: Barcha darslar)" 
                           value={newPlanDesc} onChange={e => setNewPlanDesc(e.target.value)} 
                         />
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
                           <input 
                             className="cyber-input" 
                             style={{ flex: 1 }}
                             type="number" placeholder="Narxi (UZS)" 
                             value={newPlanPrice} onChange={e => setNewPlanPrice(e.target.value)} required 
                           />
-                          <input 
-                            className="cyber-input" 
-                            style={{ flex: 1 }}
-                            type="number" placeholder="Muddat (kun)" 
-                            value={newPlanDuration} onChange={e => setNewPlanDuration(e.target.value)} required 
-                          />
+                          {!isLifetime && (
+                            <input 
+                              className="cyber-input" 
+                              style={{ flex: 1 }}
+                              type="number" placeholder="Muddat (kun)" 
+                              value={newPlanDuration} onChange={e => setNewPlanDuration(e.target.value)} required 
+                            />
+                          )}
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)', fontSize: '14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isLifetime} 
+                              onChange={e => setIsLifetime(e.target.checked)} 
+                              style={{ accentColor: 'var(--accent)' }}
+                            />
+                            Butun umrlik
+                          </label>
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
                           <button type="submit" className="btn-small-glow" style={{ flex: 1, padding: '12px', justifyContent: 'center' }}>Saqlash</button>

@@ -70,8 +70,13 @@ bot.command('mystatus', async (ctx) => {
       const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       
       text += `📺 **${sub.channel.title}**\n`;
-      text += `   📅 Tugash: ${expiresAt.toLocaleDateString('uz-UZ')}\n`;
-      text += `   ⏳ Qoldi: ${daysLeft > 0 ? daysLeft + ' kun' : '⚠️ Bugun tugaydi!'}\n\n`;
+      if (daysLeft > 3650) {
+        text += `   📅 Tugash: Butun umrlik\n`;
+        text += `   ⏳ Qoldi: Cheklanmagan\n\n`;
+      } else {
+        text += `   📅 Tugash: ${expiresAt.toLocaleDateString('uz-UZ')}\n`;
+        text += `   ⏳ Qoldi: ${daysLeft > 0 ? daysLeft + ' kun' : '⚠️ Bugun tugaydi!'}\n\n`;
+      }
     }
 
     await ctx.reply(text, { parse_mode: 'Markdown' });
@@ -163,7 +168,11 @@ bot.on('channel_post', async (ctx) => {
         });
 
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+        if (payment.plan.duration === 0) {
+          expiresAt.setFullYear(expiresAt.getFullYear() + 100);
+        } else {
+          expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+        }
 
         await prisma.subscription.create({
           data: {
@@ -256,7 +265,11 @@ bot.on('callback_query', async (ctx) => {
       });
 
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+      if (payment.plan.duration === 0) {
+        expiresAt.setFullYear(expiresAt.getFullYear() + 100);
+      } else {
+        expiresAt.setDate(expiresAt.getDate() + payment.plan.duration);
+      }
 
       await prisma.subscription.create({
         data: {
