@@ -766,7 +766,7 @@ export default function AdminView() {
                           placeholder="Ta'rif (masalan: Barcha darslar)" 
                           value={newPlanDesc} onChange={e => setNewPlanDesc(e.target.value)} 
                         />
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                           <input 
                             className="cyber-input" 
                             style={{ flex: 1 }}
@@ -781,14 +781,29 @@ export default function AdminView() {
                               value={newPlanDuration} onChange={e => setNewPlanDuration(e.target.value)} required 
                             />
                           )}
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main)', fontSize: '14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        </div>
+                        <div style={{ marginBottom: '15px' }}>
+                          <label style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '12px', 
+                            color: isLifetime ? 'var(--accent)' : 'var(--text-muted)', 
+                            fontSize: '14px', 
+                            cursor: 'pointer', 
+                            background: isLifetime ? 'rgba(0, 240, 255, 0.08)' : 'rgba(255,255,255,0.03)', 
+                            padding: '12px 16px', 
+                            borderRadius: '10px', 
+                            border: isLifetime ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.1)', 
+                            transition: 'all 0.3s ease',
+                            userSelect: 'none'
+                          }}>
                             <input 
                               type="checkbox" 
                               checked={isLifetime} 
                               onChange={e => setIsLifetime(e.target.checked)} 
-                              style={{ accentColor: 'var(--accent)' }}
+                              style={{ accentColor: 'var(--accent)', width: '18px', height: '18px', cursor: 'pointer', margin: 0 }}
                             />
-                            Butun umrlik
+                            <span style={{ fontWeight: isLifetime ? '500' : 'normal', textShadow: isLifetime ? '0 0 10px rgba(0, 240, 255, 0.3)' : 'none' }}>Butun umrlik obuna (muddat cheklovisiz)</span>
                           </label>
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
