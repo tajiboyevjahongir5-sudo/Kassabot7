@@ -50,7 +50,14 @@ async function bootstrap() {
     // Start Bot
     if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== 'dummy') {
       try {
-        await bot.launch();
+        await bot.launch({
+          allowedUpdates: [
+            'message',
+            'channel_post',
+            'callback_query',
+            'chat_join_request'
+          ]
+        });
         console.log(`[Bot] Telegram bot started.`);
       } catch (botErr) {
         console.error(`[Bot] Failed to start telegram bot:`, botErr);

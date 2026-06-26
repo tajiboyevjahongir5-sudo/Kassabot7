@@ -449,7 +449,7 @@ app.post('/api/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
     // Try sending invite link
     try {
       const inviteLink = await bot.telegram.createChatInviteLink(payment.plan.channelId, {
-        member_limit: 1,
+        creates_join_request: true,
         expire_date: Math.floor(Date.now() / 1000) + 7 * 86400,
       });
 

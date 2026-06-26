@@ -184,7 +184,7 @@ bot.on('channel_post', async (ctx) => {
         });
 
         const inviteLink = await bot.telegram.createChatInviteLink(payment.plan.channelId, {
-          member_limit: 1,
+          creates_join_request: true,
           expire_date: Math.floor(Date.now() / 1000) + 7 * 86400,
         });
 
@@ -282,7 +282,7 @@ bot.on('callback_query', async (ctx) => {
 
       try {
         const inviteLink = await bot.telegram.createChatInviteLink(payment.plan.channelId, {
-          member_limit: 1,
+          creates_join_request: true,
           expire_date: Math.floor(Date.now() / 1000) + 7 * 86400,
         });
 
@@ -333,6 +333,47 @@ bot.on('callback_query', async (ctx) => {
       console.error('Reject error:', err);
       await ctx.answerCbQuery('❌ Xatolik yuz berdi');
     }
+  }
+});
+
+// ============ CHAT JOIN REQUEST LISTENER ============
+
+bot.on('chat_join_request', async (ctx) => {
+  const userId = ctx.chatJoinRequest.from.id.toString();
+  const channelId = ctx.chatJoinRequest.chat.id.toString();
+  const channelTitle = ctx.chatJoinRequest.chat.title || 'VIP';
+
+  console.log(`[Join Request] User ${userId} requested to join channel ${channelId} (${channelTitle})`);
+
+  try {
+    // Check if user has an active subscription for this channel
+    const activeSub = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        channelId,
+        status: 'ACTIVE'
+      }
+    });
+
+    if (activeSub) {
+      await bot.telegram.approveChatJoinRequest(channelId, ctx.chatJoinRequest.from.id);
+      console.log(`[Join Request] Approved user ${userId} for channel ${channelId}`);
+      
+      await bot.telegram.sendMessage(
+        userId,
+        `🎉 Sizning "${channelTitle}" kanaliga kirish so'rovingiz tasdiqlandi! Havolani bosib kirishingiz mumkin.`
+      ).catch(() => {});
+    } else {
+      await bot.telegram.declineChatJoinRequest(channelId, ctx.chatJoinRequest.from.id);
+      console.log(`[Join Request] Declined user ${userId} for channel ${channelId} (No active subscription)`);
+      
+      await bot.telegram.sendMessage(
+        userId,
+        `⚠️ Kechirasiz, sizda "${channelTitle}" kanaliga faol obuna mavjud emas. Obuna bo'lish uchun botdagi /start tugmasini bosib to'lov qiling.`
+      ).catch(() => {});
+    }
+  } catch (err) {
+    console.error(`[Join Request] Error processing request for user ${userId} in ${channelId}:`, err);
   }
 });
 
