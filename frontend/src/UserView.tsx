@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react';
 import { Crown, Lock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import './index.css';
 
+// 1 RUB = ~155 UZS (approximate rate)
+const UZS_PER_RUB = 155;
+function formatRub(uzs: number): string {
+  return (uzs / UZS_PER_RUB).toFixed(0);
+}
+
 // TypeScript interfaces
 interface Plan {
   id: number;
@@ -173,9 +179,12 @@ function UserView() {
             </div>
 
             <div style={{ background: 'rgba(176, 38, 255, 0.1)', border: '1px solid var(--accent)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--accent)' }}>To'lanadigan summa (UZS):</div>
+              <div style={{ fontSize: '12px', color: 'var(--accent)' }}>To'lanadigan summa:</div>
               <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff', userSelect: 'all', textShadow: '0 0 10px rgba(176, 38, 255, 0.5)' }}>
-                {activePayment.amount.toLocaleString('ru-RU')}
+                {activePayment.amount.toLocaleString('ru-RU')} UZS
+              </div>
+              <div style={{ fontSize: '14px', color: 'var(--accent-cyan)', marginTop: '4px', opacity: 0.8 }}>
+                ≈ {formatRub(activePayment.amount)} ₽
               </div>
             </div>
 
@@ -329,7 +338,8 @@ function UserView() {
                             <div className="plan-desc">{plan.description}</div>
                           </div>
                           <div className="plan-price">
-                            {plan.price.toLocaleString('ru-RU')} UZS
+                            <div>{plan.price.toLocaleString('ru-RU')} UZS</div>
+                            <div style={{ fontSize: '12px', opacity: 0.6, marginTop: '2px' }}>≈ {formatRub(plan.price)} ₽</div>
                             {selectedPlan === plan.id && (
                               <CheckCircle2 size={20} color="#00ff66" style={{ marginLeft: 4, filter: 'drop-shadow(0 0 5px #00ff66)' }} />
                             )}
@@ -362,7 +372,7 @@ function UserView() {
                     });
                     const data = await res.json();
                     if (data.valid) {
-                      setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS`);
+                      setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS (≈ ${formatRub(data.discountedPrice)} ₽)`);
                     } else {
                       setPromoStatus('❌ Promo-kod noto\'g\'ri yoki muddati tugagan');
                     }

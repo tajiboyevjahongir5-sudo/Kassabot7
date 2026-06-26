@@ -153,7 +153,7 @@ const requireAdmin = (req: express.Request, res: express.Response, next: express
 
   const initData = req.headers['x-telegram-init-data'] as string;
   const botToken = process.env.BOT_TOKEN;
-  const adminId = process.env.ADMIN_ID; // The user's Telegram ID from Railway variables
+  const adminIdEnv = process.env.ADMIN_ID; // Comma-separated admin IDs
 
   if (!initData || !botToken) {
     return res.status(401).json({ error: 'Unauthorized: Missing initData or token' });
@@ -161,8 +161,9 @@ const requireAdmin = (req: express.Request, res: express.Response, next: express
 
   const user = validateWebAppData(initData, botToken);
   
-  // Also check against hardcoded ID if ADMIN_ID is not set yet, to prevent total lockout for the owner during setup
-  if (!user || (adminId && user.id?.toString() !== adminId)) {
+  // Parse comma-separated admin IDs and check
+  const adminIds = adminIdEnv ? adminIdEnv.split(',').map(id => id.trim()) : [];
+  if (!user || (adminIds.length > 0 && !adminIds.includes(user.id?.toString()))) {
     return res.status(403).json({ error: 'Forbidden: You are not the admin' });
   }
 
@@ -535,8 +536,9 @@ app.post('/api/complaint', async (req, res) => {
   complaints.add(key);
 
   try {
-    const adminId = process.env.ADMIN_ID;
-    if (adminId) {
+    const adminIdEnv = process.env.ADMIN_ID;
+    const adminIds = adminIdEnv ? adminIdEnv.split(',').map(id => id.trim()) : [];
+    if (adminIds.length > 0) {
       const dateStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" });
       const message = 
         `📞 Shikoyat!\n` +
@@ -546,7 +548,9 @@ app.post('/api/complaint', async (req, res) => {
         `⏰ Vaqt: ${dateStr}\n\n` +
         `Foydalanuvchi to'lov tushmaganligidan shikoyat qilmoqda.`;
       
-      await bot.telegram.sendMessage(adminId, message);
+      for (const adminId of adminIds) {
+        await bot.telegram.sendMessage(adminId, message).catch(e => console.error(`Complaint notification error for ${adminId}:`, e));
+      }
     }
     res.json({ success: true });
   } catch (err) {

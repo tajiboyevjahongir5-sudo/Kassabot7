@@ -5,6 +5,20 @@ import cron from 'node-cron';
 
 export const bot = new Telegraf(process.env.BOT_TOKEN || 'dummy');
 
+// ============ HELPERS ============
+
+// Parse ADMIN_ID env variable (supports comma-separated IDs)
+function getAdminIds(): string[] {
+  const adminId = process.env.ADMIN_ID;
+  if (!adminId) return [];
+  return adminId.split(',').map(id => id.trim()).filter(id => id.length > 0);
+}
+
+function isAdmin(userId: string): boolean {
+  const adminIds = getAdminIds();
+  return adminIds.includes(userId);
+}
+
 // ============ COMMANDS ============
 
 bot.start(async (ctx) => {
@@ -35,10 +49,9 @@ bot.start(async (ctx) => {
 });
 
 bot.command('admin', async (ctx) => {
-  const adminId = process.env.ADMIN_ID;
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
 
-  if (!adminId || ctx.from.id.toString() !== adminId) {
+  if (!isAdmin(ctx.from.id.toString())) {
     return;
   }
 
@@ -213,7 +226,7 @@ bot.on('channel_post', async (ctx) => {
       self.findIndex(t => t.payment.id === m.payment.id) === index
     );
 
-    const adminId = process.env.ADMIN_ID;
+    const adminIds = getAdminIds();
 
     for (const match of uniqueCloseMatches) {
       const payment = match.payment;
@@ -221,10 +234,10 @@ bot.on('channel_post', async (ctx) => {
       const expectedAmount = match.expectedAmount;
       const usernameVal = payment.user?.username ? payment.user.username : 'yo\'q';
 
-      // Notify admin
-      if (adminId) {
+      // Notify all admins
+      for (const aid of adminIds) {
         await bot.telegram.sendMessage(
-          adminId,
+          aid,
           `⚠️ Noto'g'ri summa keldi! Kimdir ${foundAmount} to'ladi, lekin kutilgan summa ${expectedAmount} edi. To'lov ID: #${payment.id}. Foydalanuvchi: @${usernameVal}`
         ).catch(e => console.error("Admin notification error:", e));
       }
@@ -244,8 +257,7 @@ bot.on('callback_query', async (ctx) => {
   const data = (ctx.callbackQuery as any).data;
   if (!data) return;
 
-  const adminId = process.env.ADMIN_ID;
-  if (adminId && ctx.from.id.toString() !== adminId) {
+  if (!isAdmin(ctx.from.id.toString())) {
     return ctx.answerCbQuery('⛔ Siz admin emassiz.');
   }
 
@@ -540,26 +552,28 @@ export function startPaymentTimeoutCron() {
 // ============ ADMIN NOTIFICATION HELPER ============
 
 export async function notifyAdminNewPayment(payment: any, user: any, plan: any) {
-  const adminId = process.env.ADMIN_ID;
-  if (!adminId) return;
+  const adminIds = getAdminIds();
+  if (adminIds.length === 0) return;
 
-  try {
-    const text = 
-      `💰 **Yangi to'lov!**\n\n` +
-      `👤 Ism: ${user.firstName || 'Ismsiz'}\n` +
-      `📛 Username: ${user.username ? '@' + user.username : 'yo\'q'}\n` +
-      `💵 Summa: ${payment.amount.toLocaleString()} UZS\n` +
-      `📦 Tarif: ${plan.name}\n` +
-      `🆔 To'lov ID: #${payment.id}`;
+  const text = 
+    `💰 **Yangi to'lov!**\n\n` +
+    `👤 Ism: ${user.firstName || 'Ismsiz'}\n` +
+    `📛 Username: ${user.username ? '@' + user.username : 'yo\'q'}\n` +
+    `💵 Summa: ${payment.amount.toLocaleString()} UZS\n` +
+    `📦 Tarif: ${plan.name}\n` +
+    `🆔 To'lov ID: #${payment.id}`;
 
-    await bot.telegram.sendMessage(adminId, text, {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        Markup.button.callback('✅ Tasdiqlash', `confirm_pay:${payment.id}`),
-        Markup.button.callback('❌ Bekor qilish', `reject_pay:${payment.id}`)
-      ])
-    });
-  } catch (err) {
-    console.error('Admin notification error:', err);
+  for (const adminId of adminIds) {
+    try {
+      await bot.telegram.sendMessage(adminId, text, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          Markup.button.callback('✅ Tasdiqlash', `confirm_pay:${payment.id}`),
+          Markup.button.callback('❌ Bekor qilish', `reject_pay:${payment.id}`)
+        ])
+      });
+    } catch (err) {
+      console.error(`Admin notification error for ${adminId}:`, err);
+    }
   }
 }
