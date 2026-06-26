@@ -560,10 +560,17 @@ app.post('/api/complaint', async (req, res) => {
 });
 
 // Serve static files from frontend build
-app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+app.use(express.static(path.join(__dirname, '../../frontend/dist'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    }
+  }
+}));
 
 // Catch-all route for frontend SPA routing
 app.use((req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   const filePath = path.join(__dirname, '../../frontend/dist/index.html');
   res.sendFile(filePath, (err) => {
     if (err) {
