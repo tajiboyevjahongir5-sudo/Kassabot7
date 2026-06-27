@@ -1,5 +1,5 @@
 import { app } from './api';
-import { bot, startSubscriptionCron, startExpiryWarningCron, startPaymentTimeoutCron } from './bot';
+import { bot, startSubscriptionCron, startExpiryWarningCron, startPaymentTimeoutCron, startRubRateCron } from './bot';
 import { prisma } from './prisma';
 
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
@@ -70,6 +70,7 @@ async function bootstrap() {
     startSubscriptionCron();
     startExpiryWarningCron();
     startPaymentTimeoutCron();
+    startRubRateCron();
     console.log('[CRON] All cron jobs started.');
   } catch (err) {
     console.error("Bootstrap error:", err);

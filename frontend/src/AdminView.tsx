@@ -27,7 +27,7 @@ export default function AdminView() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, activeSubs: 0, totalChannels: 0 });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('payments'); // payments, channels, users, broadcast, stats, settings
+  const [activeTab, setActiveTab] = useState('payments'); // payments, channels, cards, users, broadcast, stats, settings
 
   // Settings
   const [settings, setSettings] = useState({ cardNumber: '', paymentChannelId: '' });
@@ -49,6 +49,13 @@ export default function AdminView() {
   const [newPromoValue, setNewPromoValue] = useState('');
   const [newPromoMaxUses, setNewPromoMaxUses] = useState('');
   
+  // Cards
+  const [cards, setCards] = useState<any[]>([]);
+  const [newCardSlot, setNewCardSlot] = useState('');
+  const [newCardNumber, setNewCardNumber] = useState('');
+  const [newCardHolder, setNewCardHolder] = useState('');
+  const [newCardBank, setNewCardBank] = useState('');
+  
   // New channel form
   const [newChannelId, setNewChannelId] = useState('');
   const [newChannelTitle, setNewChannelTitle] = useState('');
@@ -68,14 +75,15 @@ export default function AdminView() {
 
   const fetchData = async () => {
     try {
-      const [chRes, stRes, setRes, usrRes, payRes, revRes, promoRes] = await Promise.all([
+      const [chRes, stRes, setRes, usrRes, payRes, revRes, promoRes, cardsRes] = await Promise.all([
         fetch(`${API_URL}/channels`),
         fetch(`${API_URL}/admin/stats`, { headers }),
         fetch(`${API_URL}/admin/settings`, { headers }),
         fetch(`${API_URL}/admin/users`, { headers }),
         fetch(`${API_URL}/admin/payments?status=${paymentFilter}`, { headers }),
         fetch(`${API_URL}/admin/revenue`, { headers }),
-        fetch(`${API_URL}/admin/promos`, { headers })
+        fetch(`${API_URL}/admin/promos`, { headers }),
+        fetch(`${API_URL}/cards`, { headers })
       ]);
       if (chRes.ok) setChannels(await chRes.json());
       if (stRes.ok) setStats(await stRes.json());
@@ -84,6 +92,7 @@ export default function AdminView() {
       if (payRes.ok) setPayments(await payRes.json());
       if (revRes.ok) setRevenue(await revRes.json());
       if (promoRes.ok) setPromos(await promoRes.json());
+      if (cardsRes.ok) setCards(await cardsRes.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -312,6 +321,10 @@ export default function AdminView() {
           <div className="admin-tab-icon"><Send size={24} color={activeTab === 'broadcast' ? 'var(--accent-cyan)' : '#f59e0b'} /></div>
           <div className="admin-tab-label">Xabarnoma</div>
         </div>
+        <div className={`admin-tab-item ${activeTab === 'cards' ? 'active' : ''}`} onClick={() => setActiveTab('cards')}>
+          <div className="admin-tab-icon"><CreditCard size={24} color={activeTab === 'cards' ? 'var(--accent-cyan)' : '#8b5cf6'} /></div>
+          <div className="admin-tab-label">Kartalar</div>
+        </div>
         <div className={`admin-tab-item ${activeTab === 'channels' ? 'active' : ''}`} onClick={() => setActiveTab('channels')}>
           <div className="admin-tab-icon"><Box size={24} color={activeTab === 'channels' ? 'var(--accent-cyan)' : '#eab308'} /></div>
           <div className="admin-tab-label">Kanal +</div>
@@ -360,19 +373,115 @@ export default function AdminView() {
           </div>
         )}
 
+        {activeTab === 'cards' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>Karta va Limitlar</h2>
+              <button 
+                onClick={async () => {
+                  if (!confirm("Haqiqatan ham keyingi kartaga o'tkazmoqchimisiz?")) return;
+                  await fetch(`${API_URL}/admin/cards/rotate`, { method: 'POST', headers });
+                  fetchData();
+                }}
+                className="btn-small-glow" 
+                style={{ padding: '8px 12px', background: 'rgba(255, 0, 85, 0.1)', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }}
+              >
+                Keyingisiga o'tish
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: '16px', marginBottom: '24px' }}>
+              {cards.map(card => (
+                <div key={card.id} className="cyber-card" style={{ padding: '16px', border: card.isActive ? '1px solid var(--accent-green)' : '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '16px', color: card.isActive ? 'var(--accent-green)' : '#fff' }}>
+                          Slot {card.slot}: {card.cardNumber}
+                        </span>
+                        {card.isActive && <div style={{ fontSize: '10px', background: 'var(--accent-green)', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>FAOL</div>}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{card.bankName} - {card.cardHolder}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {!card.isActive && (
+                        <button onClick={async () => {
+                          await fetch(`${API_URL}/admin/cards/${card.id}/activate`, { method: 'POST', headers });
+                          fetchData();
+                        }} style={{ fontSize: '12px', background: 'transparent', border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}>Faollashtirish</button>
+                      )}
+                      <button onClick={async () => {
+                        if (!confirm("Limitni nolga tushirasizmi?")) return;
+                        await fetch(`${API_URL}/admin/cards/${card.id}/reset`, { method: 'POST', headers });
+                        fetchData();
+                      }} style={{ fontSize: '12px', background: 'transparent', border: '1px solid #f59e0b', color: '#f59e0b', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}>Reset</button>
+                      <button onClick={async () => {
+                        if (!confirm("Kartani o'chirasizmi?")) return;
+                        await fetch(`${API_URL}/admin/cards/${card.id}`, { method: 'DELETE', headers });
+                        fetchData();
+                      }} style={{ fontSize: '12px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer' }}><Trash2 size={14}/></button>
+                    </div>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden', marginBottom: '4px' }}>
+                    <div style={{ 
+                      width: `${Math.min(100, (card.transferCount / card.maxTransfers) * 100)}%`, 
+                      height: '100%', 
+                      background: (card.transferCount >= card.maxTransfers) ? 'var(--accent-red)' : 'var(--accent-cyan)' 
+                    }}></div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    <span>{card.transferCount} tushum</span>
+                    <span>Limit: {card.maxTransfers}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <h3 style={{ fontSize: '16px', marginBottom: '12px' }}>Yangi karta qo'shish</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const res = await fetch(`${API_URL}/admin/cards`, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({ slot: newCardSlot, cardNumber: newCardNumber, cardHolder: newCardHolder, bankName: newCardBank, maxTransfers: 35 })
+                });
+                if (res.ok) {
+                  setNewCardSlot(''); setNewCardNumber(''); setNewCardHolder(''); setNewCardBank('');
+                  fetchData();
+                } else alert('Xatolik');
+              } catch { alert('Xatolik'); }
+            }} className="cyber-card" style={{ padding: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '8px', marginBottom: '8px' }}>
+                <input className="cyber-input" placeholder="Slot raqami (1, 2, 3)" value={newCardSlot} onChange={e => setNewCardSlot(e.target.value)} required type="number" />
+                <input className="cyber-input" placeholder="Karta raqami" value={newCardNumber} onChange={e => setNewCardNumber(e.target.value)} required />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                <input className="cyber-input" placeholder="Egasi (ism)" value={newCardHolder} onChange={e => setNewCardHolder(e.target.value)} />
+                <input className="cyber-input" placeholder="Bank nomi" value={newCardBank} onChange={e => setNewCardBank(e.target.value)} />
+              </div>
+              <button type="submit" className="neon-btn" style={{ width: '100%' }}>Qo'shish</button>
+            </form>
+          </div>
+        )}
+
         {activeTab === 'settings' && (
           <div>
             <h2 style={{ fontSize: '18px', marginBottom: '15px' }}>Sozlamalar</h2>
             <form onSubmit={handleSaveSettings} className="cyber-card" style={{ padding: '20px' }}>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Karta Raqami (To'lovlar uchun)</label>
+                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Rubl kursi (1 RUB = necha so'm)</label>
                 <input 
                   className="cyber-input" 
                   style={{ width: '100%' }}
-                  placeholder="masalan: 8600 1234 5678 9012" 
-                  value={settings.cardNumber || ''} 
-                  onChange={e => setSettings({...settings, cardNumber: e.target.value})} 
+                  type="number"
+                  placeholder="masalan: 155" 
+                  value={(settings as any).rubRate || 155} 
+                  onChange={e => setSettings({...settings, rubRate: Number(e.target.value)} as any)} 
                 />
+                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Bot buni har 25 daqiqada avtomat yangilaydi (Markaziy bank orqali).</p>
               </div>
               <div style={{ marginBottom: '15px' }}>
                 <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>SMS Kanal ID (To'lovlarni tekshirish uchun)</label>

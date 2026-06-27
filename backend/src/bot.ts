@@ -1,5 +1,6 @@
 import { Telegraf, Markup } from 'telegraf';
 import { prisma } from './prisma';
+import { incrementCardTransfer } from './cardService';
 import 'dotenv/config';
 import cron from 'node-cron';
 
@@ -180,6 +181,8 @@ bot.on('channel_post', async (ctx) => {
           where: { id: payment.id },
           data: { status: 'COMPLETED' }
         });
+        
+        await incrementCardTransfer();
 
         const expiresAt = new Date();
         if (payment.plan.duration === 0) {
@@ -280,6 +283,8 @@ bot.on('callback_query', async (ctx) => {
         where: { id: paymentId },
         data: { status: 'COMPLETED' }
       });
+      
+      await incrementCardTransfer();
 
       const expiresAt = new Date();
       if (payment.plan.duration === 0) {
@@ -576,4 +581,35 @@ export async function notifyAdminNewPayment(payment: any, user: any, plan: any) 
       console.error(`Admin notification error for ${adminId}:`, err);
     }
   }
+}
+
+// 4. Auto-update Ruble exchange rate (every 25 minutes)
+export function startRubRateCron() {
+  cron.schedule('*/25 * * * *', async () => {
+    try {
+      // Use CBR daily XML API or a free JSON API for UZS to RUB rate
+      // 1 RUB = ? UZS
+      const response = await fetch('https://www.cbr-xml-daily.ru/daily_json.js');
+      if (response.ok) {
+        const data = await response.json();
+        const uzsData = data.Valute.UZS; // 10000 UZS = Value RUB
+        if (uzsData) {
+          // Calculate 1 RUB = X UZS
+          // Value is RUB per Nominal UZS (e.g., 10000 UZS = 80.5 RUB)
+          // So 1 RUB = Nominal / Value UZS (e.g. 10000 / 80.5 = 124.2 UZS)
+          const uzsPerRub = uzsData.Nominal / uzsData.Value;
+          
+          await prisma.settings.upsert({
+            where: { id: 1 },
+            update: { rubRate: uzsPerRub },
+            create: { id: 1, rubRate: uzsPerRub }
+          });
+          
+          console.log(`[CRON] Ruble rate updated: 1 RUB = ${uzsPerRub.toFixed(2)} UZS`);
+        }
+      }
+    } catch (err) {
+      console.error('[CRON] Ruble rate update error:', err);
+    }
+  });
 }

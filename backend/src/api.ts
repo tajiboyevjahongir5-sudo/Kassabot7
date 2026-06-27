@@ -282,6 +282,109 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
+// --- Card Management Routes ---
+
+app.get('/api/cards', requireAdmin, async (req, res) => {
+  try {
+    const cards = await prisma.card.findMany({ orderBy: { slot: 'asc' } });
+    res.json(cards);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch cards' });
+  }
+});
+
+app.post('/api/admin/cards', requireAdmin, async (req, res) => {
+  try {
+    const { slot, cardNumber, cardHolder, bankName, maxTransfers } = req.body;
+    const card = await prisma.card.create({
+      data: { slot: Number(slot), cardNumber, cardHolder, bankName, maxTransfers: Number(maxTransfers) || 35 }
+    });
+    res.json(card);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create card' });
+  }
+});
+
+app.put('/api/admin/cards/:id', requireAdmin, async (req, res) => {
+  try {
+    const { cardNumber, cardHolder, bankName, maxTransfers, slot } = req.body;
+    const card = await prisma.card.update({
+      where: { id: Number(req.params.id) },
+      data: { cardNumber, cardHolder, bankName, maxTransfers: Number(maxTransfers), slot: Number(slot) }
+    });
+    res.json(card);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update card' });
+  }
+});
+
+app.delete('/api/admin/cards/:id', requireAdmin, async (req, res) => {
+  try {
+    await prisma.card.delete({ where: { id: Number(req.params.id) } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete card' });
+  }
+});
+
+app.post('/api/admin/cards/:id/activate', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await prisma.$transaction([
+      prisma.card.updateMany({ data: { isActive: false } }),
+      prisma.card.update({ where: { id }, data: { isActive: true } })
+    ]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to activate card' });
+  }
+});
+
+app.post('/api/admin/cards/:id/reset', requireAdmin, async (req, res) => {
+  try {
+    await prisma.card.update({
+      where: { id: Number(req.params.id) },
+      data: { transferCount: 0 }
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reset card' });
+  }
+});
+
+import { incrementCardTransfer } from './cardService';
+
+app.post('/api/admin/cards/rotate', requireAdmin, async (req, res) => {
+  try {
+    const activeCard = await prisma.card.findFirst({ where: { isActive: true } });
+    if (!activeCard) {
+      const firstCard = await prisma.card.findFirst({ orderBy: { slot: 'asc' } });
+      if (firstCard) {
+        await prisma.card.update({ where: { id: firstCard.id }, data: { isActive: true } });
+      }
+      return res.json({ success: true });
+    }
+    
+    // Force a rotation by temporarily setting transfer count to max, then calling the service, or just doing it here
+    const allCards = await prisma.card.findMany({ orderBy: { slot: 'asc' } });
+    if (allCards.length === 0) return res.json({ success: true });
+
+    let nextCard = allCards.find(c => c.slot > activeCard.slot);
+    if (!nextCard) {
+      nextCard = allCards[0]; // loop back
+    }
+
+    await prisma.$transaction([
+      prisma.card.updateMany({ data: { isActive: false } }),
+      prisma.card.update({ where: { id: nextCard.id }, data: { isActive: true, transferCount: 0 } })
+    ]);
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to rotate card' });
+  }
+});
+
 // Broadcast message
 app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
   const { text, imageBase64 } = req.body;
@@ -507,15 +610,20 @@ app.post('/api/admin/payments/:id/reject', requireAdmin, async (req, res) => {
   }
 });
 
-// Get settings (public for card number)
+// Get settings (public for card number and rub rate)
 app.get('/api/settings', async (req, res) => {
   try {
     let settings = await prisma.settings.findUnique({ where: { id: 1 } });
     if (!settings) {
       settings = await prisma.settings.create({ data: { id: 1 } });
     }
-    // Only return card number to public, hide channel ID
-    res.json({ cardNumber: settings.cardNumber });
+    
+    const activeCard = await prisma.card.findFirst({ where: { isActive: true } });
+    
+    res.json({ 
+      cardNumber: activeCard ? activeCard.cardNumber : settings.cardNumber,
+      rubRate: settings.rubRate || 155
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get settings' });
   }
