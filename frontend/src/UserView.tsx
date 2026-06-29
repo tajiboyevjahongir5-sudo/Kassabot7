@@ -2,11 +2,6 @@ import { useState, useEffect } from 'react';
 import { Crown, Lock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import './index.css';
 
-// Will be fetched from settings, default 155
-function formatRub(uzs: number, rate: number): string {
-  return (uzs / rate).toFixed(0);
-}
-
 // TypeScript interfaces
 interface Plan {
   id: number;
@@ -38,7 +33,6 @@ function UserView() {
   const [promoStatus, setPromoStatus] = useState<string | null>(null);
   const [complaintSent, setComplaintSent] = useState(false);
   const [complaintLoading, setComplaintLoading] = useState(false);
-  const [rubRate, setRubRate] = useState<number>(155);
 
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -74,7 +68,6 @@ function UserView() {
       .then(res => res.json())
       .then(data => {
         if (data.cardNumber) setCardNumber(data.cardNumber);
-        if (data.rubRate) setRubRate(data.rubRate);
       })
       .catch(err => console.error(err));
   }, []);
@@ -185,9 +178,6 @@ function UserView() {
               <div style={{ fontSize: '12px', color: 'var(--accent)' }}>To'lanadigan summa:</div>
               <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff', userSelect: 'all', textShadow: '0 0 10px rgba(176, 38, 255, 0.5)' }}>
                 {activePayment.amount.toLocaleString('ru-RU')} UZS
-              </div>
-              <div style={{ fontSize: '14px', color: 'var(--accent-cyan)', marginTop: '4px', opacity: 0.8 }}>
-                ≈ {formatRub(activePayment.amount, rubRate)} ₽
               </div>
             </div>
 
@@ -342,7 +332,6 @@ function UserView() {
                           </div>
                           <div className="plan-price">
                             <div>{plan.price.toLocaleString('ru-RU')} UZS</div>
-                            <div style={{ fontSize: '12px', opacity: 0.6, marginTop: '2px' }}>≈ {formatRub(plan.price, rubRate)} ₽</div>
                             {selectedPlan === plan.id && (
                               <CheckCircle2 size={20} color="#00ff66" style={{ marginLeft: 4, filter: 'drop-shadow(0 0 5px #00ff66)' }} />
                             )}
@@ -375,7 +364,7 @@ function UserView() {
                     });
                     const data = await res.json();
                     if (data.valid) {
-                      setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS (≈ ${formatRub(data.discountedPrice, rubRate)} ₽)`);
+                      setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS`);
                     } else {
                       setPromoStatus('❌ Promo-kod noto\'g\'ri yoki muddati tugagan');
                     }
