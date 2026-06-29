@@ -52,9 +52,7 @@ async function sendSubscriptionPrompt(ctx: any, missing: any[]) {
   const allButtons = [...urlButtons, ...checkButton];
   
   await ctx.reply(
-    `⚠️ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo'lishingiz shart:\n\n` +
-    missing.map((ch: any) => `• ${ch.title}`).join('\n') +
-    `\n\nObuna bo'lgach, "✅ Tekshirish" tugmasini bosing.`,
+    `⚠️ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo'lishingiz shart:\n\nObuna bo'lgach, "✅ Tekshirish" tugmasini bosing.`,
     Markup.inlineKeyboard(allButtons as any)
   );
 }

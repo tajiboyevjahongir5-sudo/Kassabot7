@@ -389,7 +389,14 @@ app.post('/api/admin/cards', requireAdmin, async (req, res) => {
     }
     
     const card = await prisma.card.create({
-      data: { slot: slotNum, cardNumber, cardHolder, bankName, maxTransfers: Number(maxTransfers) || 40 }
+      data: { 
+        slot: slotNum, 
+        cardNumber, 
+        cardHolder, 
+        bankName, 
+        maxTransfers: Number(maxTransfers) || 40,
+        isActive: cardCount === 0 // Avtomatik aktiv qilish, agar bu 1-karta bo'lsa
+      }
     });
     res.json(card);
   } catch (err: any) {
