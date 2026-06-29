@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Tag, Upload } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload } from 'lucide-react';
 import './index.css';
 
 
@@ -38,16 +38,11 @@ export default function AdminView() {
   const [broadcastImageBase64, setBroadcastImageBase64] = useState<string | null>(null);
   const [broadcasting, setBroadcasting] = useState(false);
 
-  // Users, Payments, Revenue, Promos
+  // Users, Payments, Revenue
   const [users, setUsers] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentFilter, setPaymentFilter] = useState('PENDING');
   const [revenue, setRevenue] = useState({ totalRevenue: 0, totalPayments: 0 });
-  const [promos, setPromos] = useState<any[]>([]);
-  const [newPromoCode, setNewPromoCode] = useState('');
-  const [newPromoType, setNewPromoType] = useState('percent');
-  const [newPromoValue, setNewPromoValue] = useState('');
-  const [newPromoMaxUses, setNewPromoMaxUses] = useState('');
   
   // Cards
   const [cards, setCards] = useState<any[]>([]);
@@ -81,14 +76,13 @@ export default function AdminView() {
 
   const fetchData = async () => {
     try {
-      const [chRes, stRes, setRes, usrRes, payRes, revRes, promoRes, cardsRes, mandRes] = await Promise.all([
+      const [chRes, stRes, setRes, usrRes, payRes, revRes, cardsRes, mandRes] = await Promise.all([
         fetch(`${API_URL}/channels`),
         fetch(`${API_URL}/admin/stats`, { headers }),
         fetch(`${API_URL}/admin/settings`, { headers }),
         fetch(`${API_URL}/admin/users`, { headers }),
         fetch(`${API_URL}/admin/payments?status=${paymentFilter}`, { headers }),
         fetch(`${API_URL}/admin/revenue`, { headers }),
-        fetch(`${API_URL}/admin/promos`, { headers }),
         fetch(`${API_URL}/cards`, { headers }),
         fetch(`${API_URL}/admin/mandatory-channels`, { headers })
       ]);
@@ -98,7 +92,6 @@ export default function AdminView() {
       if (usrRes.ok) setUsers(await usrRes.json());
       if (payRes.ok) setPayments(await payRes.json());
       if (revRes.ok) setRevenue(await revRes.json());
-      if (promoRes.ok) setPromos(await promoRes.json());
       if (cardsRes.ok) setCards(await cardsRes.json());
       if (mandRes.ok) setMandatoryChannels(await mandRes.json());
     } catch (err) {
@@ -344,10 +337,6 @@ export default function AdminView() {
         <div className={`admin-tab-item ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
           <div className="admin-tab-icon"><BarChart2 size={24} color={activeTab === 'stats' ? 'var(--accent-cyan)' : '#a855f7'} /></div>
           <div className="admin-tab-label">Statistika</div>
-        </div>
-        <div className={`admin-tab-item ${activeTab === 'promos' ? 'active' : ''}`} onClick={() => setActiveTab('promos')}>
-          <div className="admin-tab-icon"><Tag size={24} color={activeTab === 'promos' ? 'var(--accent-cyan)' : '#f472b6'} /></div>
-          <div className="admin-tab-label">Promo</div>
         </div>
         <div className={`admin-tab-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
           <div className="admin-tab-icon"><Settings size={24} color={activeTab === 'settings' ? 'var(--accent-cyan)' : '#ef4444'} /></div>
@@ -747,7 +736,7 @@ export default function AdminView() {
                     </div>
                     <div className="pay-amount">{pay.amount.toLocaleString('ru-RU')} UZS</div>
                     <div className="pay-desc">
-                      {pay.plan?.name} {pay.promoCode ? `| Promo: ${pay.promoCode}` : ''} <br/>
+                      {pay.plan?.name} <br/>
                       {new Date(pay.createdAt).toLocaleString('uz-UZ')}
                     </div>
                     
@@ -1034,64 +1023,7 @@ export default function AdminView() {
           </div>
         )}
 
-        {activeTab === 'promos' && (
-          <div>
-            <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Promo-kodlar</h2>
-            
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                const res = await fetch(`${API_URL}/admin/promos`, {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({ code: newPromoCode, discountType: newPromoType, discountValue: newPromoValue, maxUses: newPromoMaxUses })
-                });
-                if (res.ok) {
-                  setNewPromoCode(''); setNewPromoValue(''); setNewPromoMaxUses('');
-                  fetchData();
-                } else alert('Xatolik');
-              } catch { alert('Xatolik'); }
-            }} className="cyber-card" style={{ padding: '20px', marginBottom: '24px' }}>
-              <input className="cyber-input" style={{ width: '100%', marginBottom: '10px', textTransform: 'uppercase' }} placeholder="PROMO KOD (masalan: SALE50)" value={newPromoCode} onChange={e => setNewPromoCode(e.target.value)} required />
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <select className="cyber-input" style={{ width: '110px', cursor: 'pointer' }} value={newPromoType} onChange={e => setNewPromoType(e.target.value)}>
-                  <option value="percent">Foiz (%)</option>
-                  <option value="fixed">Summa</option>
-                </select>
-                <input className="cyber-input" style={{ flex: 1 }} type="number" placeholder="Qiymat" value={newPromoValue} onChange={e => setNewPromoValue(e.target.value)} required />
-              </div>
-              <input className="cyber-input" style={{ width: '100%', marginBottom: '15px' }} type="number" placeholder="Maks ishlatilish (0 = cheksiz)" value={newPromoMaxUses} onChange={e => setNewPromoMaxUses(e.target.value)} />
-              <button type="submit" className="btn-small-glow" style={{ width: '100%', padding: '12px', justifyContent: 'center', background: 'linear-gradient(135deg, #f472b6, #e11d48)', boxShadow: '0 0 15px rgba(244, 114, 182, 0.4)' }}>
-                <Plus size={16} style={{ marginRight: '5px' }} /> Promo yaratish
-              </button>
-            </form>
 
-            {promos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>Promo-kodlar yo'q</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {promos.map(p => (
-                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(20, 22, 35, 0.6)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div>
-                      <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#f472b6', textShadow: '0 0 10px rgba(244,114,182,0.3)' }}>{p.code}</div>
-                      <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        {p.discountType === 'percent' ? `${p.discountValue}% chegirma` : `${p.discountValue.toLocaleString()} UZS chegirma`}
-                        {p.maxUses > 0 ? ` | ${p.usedCount}/${p.maxUses} ta ishlatilgan` : ` | ${p.usedCount} marta ishlatilgan`}
-                      </div>
-                    </div>
-                    <button onClick={async () => {
-                      if (!confirm('Bu promo-kodni o\'chirasizmi?')) return;
-                      await fetch(`${API_URL}/admin/promos/${p.id}`, { method: 'DELETE', headers });
-                      fetchData();
-                    }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', cursor: 'pointer', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </main>
       </div>
 

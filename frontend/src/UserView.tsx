@@ -29,8 +29,6 @@ function UserView() {
   const [paying, setPaying] = useState(false);
   const [activePayment, setActivePayment] = useState<any>(null);
   const [cardNumber, setCardNumber] = useState<string>('');
-  const [promoCode, setPromoCode] = useState('');
-  const [promoStatus, setPromoStatus] = useState<string | null>(null);
   const [complaintSent, setComplaintSent] = useState(false);
   const [complaintLoading, setComplaintLoading] = useState(false);
 
@@ -107,11 +105,10 @@ function UserView() {
       }
       const finalUserId = userId || 'dummy_user';
 
-      // Create or get pending payment
       const res = await fetch(`${API_URL}/create-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: selectedChannel, planId: selectedPlan, userId: finalUserId, promoCode: promoCode || undefined })
+        body: JSON.stringify({ channelId: selectedChannel, planId: selectedPlan, userId: finalUserId })
       });
       
       const data = await res.json();
@@ -343,38 +340,6 @@ function UserView() {
                 ))}
               </div>
             )}
-
-            <div className="promo-container">
-              <input
-                className="cyber-input"
-                placeholder="PROMO-KOD (IXTIYORIY)"
-                value={promoCode}
-                onChange={e => { setPromoCode(e.target.value); setPromoStatus(null); }}
-              />
-              <button
-                type="button"
-                className="btn-small-glow"
-                onClick={async () => {
-                  if (!promoCode || !selectedPlan) return;
-                  try {
-                    const res = await fetch(`${API_URL}/validate-promo`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ code: promoCode, planId: selectedPlan })
-                    });
-                    const data = await res.json();
-                    if (data.valid) {
-                      setPromoStatus(`✅ ${data.discountType === 'percent' ? data.discountValue + '%' : data.discountValue.toLocaleString() + ' UZS'} chegirma! Yangi narx: ${data.discountedPrice.toLocaleString()} UZS`);
-                    } else {
-                      setPromoStatus('❌ Promo-kod noto\'g\'ri yoki muddati tugagan');
-                    }
-                  } catch { setPromoStatus('❌ Tekshirishda xatolik'); }
-                }}
-              >
-                <CheckCircle2 size={16} /> Tekshir
-              </button>
-            </div>
-            {promoStatus && <div style={{ fontSize: '13px', marginTop: '-14px', marginBottom: '20px', padding: '0 4px', color: promoStatus.startsWith('✅') ? 'var(--accent-green)' : 'var(--accent-red)', textShadow: '0 0 10px rgba(0,0,0,0.5)' }}>{promoStatus}</div>}
 
             <button 
               className="neon-btn" 
