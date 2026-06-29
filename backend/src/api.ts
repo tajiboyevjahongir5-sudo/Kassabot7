@@ -16,8 +16,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Serve static files from frontend build
-// app.use(express.static(path.join(__dirname, '../../frontend/dist')));
+// Serve static files from frontend build is handled at the bottom of the file
 
 // Get all channels and their plans
 app.get('/api/channels', async (req, res) => {

@@ -188,8 +188,8 @@ bot.command('help', async (ctx) => {
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
 
 function extractNumbers(text: string): number[] {
-  // Remove decimal .00
-  let temp = text.replace(/\.00\b/g, '');
+  // Remove decimal .00 or ,00
+  let temp = text.replace(/[,.]00\b/g, '');
   
   // Match candidate numbers (digits optionally separated by spaces, commas or dots)
   const matches = temp.match(/\b\d+(?:[\s,.]\d+)*\b/g) || [];
