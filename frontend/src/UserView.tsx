@@ -140,7 +140,7 @@ function UserView() {
     <>
       <div className="aurora-bg"></div>
       <header>
-        <div className="logo-text">kassa bot</div>
+        <div className="logo-text">DIORA VIP</div>
         <div className="header-controls">
           <div className="icon-btn">✨</div>
           {tg?.initDataUnsafe?.user?.photo_url ? (
@@ -322,24 +322,35 @@ function UserView() {
 
                     <div className="plans">
                       {channel.plans.map((plan) => (
-                        <div 
-                          key={plan.id}
-                          className={`plan-item ${selectedPlan === plan.id ? 'selected' : 'unselected'}`}
-                          onClick={() => {
-                            setSelectedPlan(plan.id);
-                            setSelectedChannel(channel.id);
-                          }}
-                        >
-                          <div>
-                            <div className="plan-name">{plan.name}</div>
-                            <div className="plan-desc">{plan.description}</div>
+                        <div key={plan.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                          <div 
+                            className={`plan-item ${selectedPlan === plan.id ? 'selected' : 'unselected'}`}
+                            onClick={() => {
+                              setSelectedPlan(plan.id);
+                              setSelectedChannel(channel.id);
+                            }}
+                          >
+                            <div>
+                              <div className="plan-name">{plan.name}</div>
+                              <div className="plan-desc">{plan.description}</div>
+                            </div>
+                            <div className="plan-price">
+                              <div>{plan.price.toLocaleString('ru-RU')} UZS</div>
+                              {selectedPlan === plan.id && (
+                                <CheckCircle2 size={20} color="#00ff66" style={{ marginLeft: 4, filter: 'drop-shadow(0 0 5px #00ff66)' }} />
+                              )}
+                            </div>
                           </div>
-                          <div className="plan-price">
-                            <div>{plan.price.toLocaleString('ru-RU')} UZS</div>
-                            {selectedPlan === plan.id && (
-                              <CheckCircle2 size={20} color="#00ff66" style={{ marginLeft: 4, filter: 'drop-shadow(0 0 5px #00ff66)' }} />
-                            )}
-                          </div>
+                          {selectedPlan === plan.id && (
+                            <button 
+                              className="neon-btn" 
+                              disabled={paying}
+                              onClick={handlePay}
+                              style={{ marginTop: '8px', marginBottom: '4px', padding: '12px', fontSize: '14px' }}
+                            >
+                              {paying ? <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div> : "Obunani Faollashtirish"}
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -348,13 +359,6 @@ function UserView() {
               </div>
             )}
 
-            <button 
-              className="neon-btn" 
-              disabled={!selectedPlan || paying || channels.length === 0}
-              onClick={handlePay}
-            >
-              {paying ? <div className="spinner"></div> : "Obunani Faollashtirish"}
-            </button>
           </>
         )}
       </main>
