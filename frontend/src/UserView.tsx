@@ -161,20 +161,78 @@ function UserView() {
         {activePayment ? (
           <div className="cyber-card" style={{ padding: '20px', textAlign: 'center' }}>
             <h2 className="gradient-title" style={{ fontSize: '22px', marginBottom: '15px' }}>To'lov qilish</h2>
-            <div style={{ background: 'rgba(255, 0, 85, 0.1)', border: '1px solid var(--accent-red)', padding: '12px', borderRadius: '12px', marginBottom: '15px' }}>
-              <p style={{ fontSize: '14px', color: '#fff', fontWeight: 'bold' }}>
-                ⚠️ Diqqat! Iltimos, faqat ekraningizda ko'rsatilgan summani o'tkazing. 1 so'm kam yoki ko'p bo'lsa ham tizim to'lovni avtomat qabul qilmaydi!
-              </p>
+            <div style={{ 
+              background: 'linear-gradient(90deg, rgba(255, 170, 0, 0.1), rgba(255, 50, 50, 0.05))', 
+              borderLeft: '4px solid #ffaa00', 
+              padding: '14px 18px', 
+              borderRadius: '8px', 
+              marginBottom: '20px',
+              textAlign: 'left',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'flex-start'
+            }}>
+              <div style={{ color: '#ffaa00', marginTop: '2px' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', lineHeight: '1.5' }}>
+                <strong style={{ color: '#ffaa00', display: 'block', marginBottom: '4px' }}>Diqqat!</strong>
+                Iltimos, faqat ekranda ko'rsatilgan <b>aniq summani</b> o'tkazing. 1 so'm farq qilsa ham to'lov avtomat tasdiqlanmaydi!
+              </div>
             </div>
             
-            <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Karta raqami:</div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px', userSelect: 'all', color: '#fff', marginTop: '4px' }}>
-                {cardNumber || "Admin karta kiritmagan!"}
+            <div style={{ 
+              background: 'linear-gradient(135deg, #23253a 0%, #151623 100%)', 
+              border: '1px solid rgba(255,255,255,0.05)', 
+              padding: '24px', 
+              borderRadius: '16px', 
+              marginBottom: '20px',
+              position: 'relative',
+              boxShadow: '0 10px 30px -10px rgba(0,0,0,0.5)',
+              overflow: 'hidden'
+            }}>
+              {/* Decorative elements */}
+              <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', background: 'var(--accent-cyan)', filter: 'blur(50px)', opacity: 0.15 }}></div>
+              <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', width: '100px', height: '100px', background: 'var(--accent-purple)', filter: 'blur(50px)', opacity: 0.15 }}></div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px' }}>O'tkazma uchun karta</div>
+                <div style={{ opacity: 0.5 }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
               </div>
+
+              <div style={{ 
+                fontSize: '22px', 
+                fontWeight: 'bold', 
+                letterSpacing: '3px', 
+                userSelect: 'all', 
+                color: '#fff',
+                fontFamily: 'monospace',
+                textAlign: 'left',
+                textShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                position: 'relative',
+                zIndex: 1
+              }}>
+                {cardNumber ? cardNumber.replace(/(\d{4})/g, '$1 ').trim() : "Admin karta kiritmagan!"}
+              </div>
+
               {cardHolder && (
-                <div style={{ fontSize: '13px', color: 'var(--accent-cyan)', marginTop: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                  👤 {cardHolder}
+                <div style={{ 
+                  fontSize: '13px', 
+                  color: 'rgba(255,255,255,0.7)', 
+                  marginTop: '15px', 
+                  textTransform: 'uppercase', 
+                  letterSpacing: '2px',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  position: 'relative',
+                  zIndex: 1
+                }}>
+                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  </div>
+                  {cardHolder}
                 </div>
               )}
             </div>
@@ -232,10 +290,28 @@ function UserView() {
               {timeLeft === 0 ? "Vaqt tugadi" : "Men to'lov qildim"}
             </button>
             <button 
-              style={{ marginTop: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-main)', padding: '12px', borderRadius: '10px', cursor: 'pointer', width: '100%', fontWeight: '500' }}
+              style={{ 
+                marginTop: '15px', 
+                background: 'rgba(255, 255, 255, 0.03)', 
+                border: '1px solid rgba(255, 255, 255, 0.08)', 
+                color: 'var(--text-muted)', 
+                padding: '14px', 
+                borderRadius: '12px', 
+                cursor: 'pointer', 
+                width: '100%', 
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'all 0.3s ease'
+              }}
               onClick={() => { setActivePayment(null); setComplaintSent(false); }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
             >
-              ⬅️ Orqaga qaytish
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+              Orqaga qaytish
             </button>
 
             {/* Complaint Button */}
