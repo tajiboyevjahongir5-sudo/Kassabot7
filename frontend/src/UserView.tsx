@@ -330,16 +330,21 @@ function UserView() {
                         <div key={plan.id} style={{ display: 'flex', flexDirection: 'column' }}>
                           <div 
                             className={`plan-item ${selectedPlan === plan.id ? 'selected' : 'unselected'}`}
+                            style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
                             onClick={() => {
-                              setSelectedPlan(plan.id);
-                              setSelectedChannel(channel.id);
+                              if (selectedPlan === plan.id) {
+                                handlePay();
+                              } else {
+                                setSelectedPlan(plan.id);
+                                setSelectedChannel(channel.id);
+                              }
                             }}
                           >
-                            <div>
+                            <div style={{ flex: 1, pointerEvents: 'none' }}>
                               <div className="plan-name">{plan.name}</div>
                               <div className="plan-desc">{plan.description}</div>
                             </div>
-                            <div className="plan-price">
+                            <div className="plan-price" style={{ pointerEvents: 'none' }}>
                               <div>{plan.price.toLocaleString('ru-RU')} UZS</div>
                               {selectedPlan === plan.id && (
                                 <CheckCircle2 size={20} color="#00ff66" style={{ marginLeft: 4, filter: 'drop-shadow(0 0 5px #00ff66)' }} />
