@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Crown, Lock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Crown, Lock, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
 import './index.css';
 
 // TypeScript interfaces
@@ -33,6 +33,18 @@ function UserView() {
   const [cardHolder, setCardHolder] = useState<string>('');
   const [complaintSent, setComplaintSent] = useState(false);
   const [complaintLoading, setComplaintLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (cardNumber) {
+      navigator.clipboard.writeText(cardNumber);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      if (tg && tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('light');
+      }
+    }
+  };
 
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -197,7 +209,31 @@ function UserView() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
                 <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px' }}>O'tkazma uchun karta</div>
-                <div style={{ opacity: 0.5 }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div 
+                    onClick={handleCopy}
+                    style={{ 
+                      background: copied ? 'rgba(0, 255, 102, 0.15)' : 'rgba(255,255,255,0.1)', 
+                      border: copied ? '1px solid rgba(0, 255, 102, 0.3)' : '1px solid rgba(255,255,255,0.2)',
+                      padding: '4px 10px', 
+                      borderRadius: '8px', 
+                      cursor: 'pointer', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      fontSize: '12px', 
+                      color: copied ? '#00ff66' : '#fff', 
+                      transition: 'all 0.2s',
+                      fontWeight: '500'
+                    }}
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? 'Nusxa olindi' : 'Nusxalash'}
+                  </div>
+                  <div style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                  </div>
+                </div>
               </div>
 
               <div style={{ 
@@ -292,23 +328,24 @@ function UserView() {
             <button 
               style={{ 
                 marginTop: '15px', 
-                background: 'rgba(255, 255, 255, 0.03)', 
-                border: '1px solid rgba(255, 255, 255, 0.08)', 
-                color: 'var(--text-muted)', 
+                background: 'rgba(255, 255, 255, 0.1)', 
+                border: '1px solid rgba(255, 255, 255, 0.2)', 
+                color: '#fff', 
                 padding: '14px', 
                 borderRadius: '12px', 
                 cursor: 'pointer', 
                 width: '100%', 
-                fontWeight: '500',
+                fontWeight: '600',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
               }}
               onClick={() => { setActivePayment(null); setComplaintSent(false); }}
-              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; }}
-              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
               Orqaga qaytish
