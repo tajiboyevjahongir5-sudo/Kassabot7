@@ -1028,7 +1028,7 @@ export default function AdminView() {
       </div>
 
       <div className="tag-bottom">
-        <div className="pill-tag">@KanalKassaBot</div>
+        <div className="pill-tag">@Diora_vip_bot</div>
       </div>
     </>
   );

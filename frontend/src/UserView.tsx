@@ -231,10 +231,10 @@ function UserView() {
               {timeLeft === 0 ? "Vaqt tugadi" : "Men to'lov qildim"}
             </button>
             <button 
-              style={{ marginTop: '15px', background: 'transparent', border: 'none', color: 'var(--text-main)', opacity: 0.6, cursor: 'pointer' }}
+              style={{ marginTop: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-main)', padding: '12px', borderRadius: '10px', cursor: 'pointer', width: '100%', fontWeight: '500' }}
               onClick={() => { setActivePayment(null); setComplaintSent(false); }}
             >
-              {timeLeft === 0 ? "Ortga qaytish" : "Bekor qilish"}
+              ⬅️ Orqaga qaytish
             </button>
 
             {/* Complaint Button */}
@@ -364,7 +364,7 @@ function UserView() {
       </main>
 
       <div className="tag-bottom">
-        <div className="pill-tag">@KanalKassaBot</div>
+        <div className="pill-tag">@Diora_vip_bot</div>
       </div>
     </>
   );
