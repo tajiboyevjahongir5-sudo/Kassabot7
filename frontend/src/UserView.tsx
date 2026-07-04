@@ -15,6 +15,7 @@ interface Plan {
 interface Channel {
   id: string;
   title: string;
+  image?: string;
   plans: Plan[];
 }
 
@@ -308,8 +309,12 @@ function UserView() {
                 {channels.map((channel) => (
                   <div key={channel.id} className="cyber-card">
                     <div className="channel-header">
-                      <div className="glass-icon">
-                        <Crown size={28} color="#fff" />
+                      <div className="glass-icon" style={{ overflow: 'hidden', padding: channel.image ? 0 : undefined }}>
+                        {channel.image ? (
+                          <img src={channel.image} alt={channel.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <Crown size={28} color="#fff" />
+                        )}
                       </div>
                       <div className="channel-info" style={{ flex: 1 }}>
                         <h2 style={{ color: '#fff' }}>{channel.title}</h2>

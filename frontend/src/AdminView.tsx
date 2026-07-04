@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle } from 'lucide-react';
 import './index.css';
 
 
@@ -57,11 +57,12 @@ export default function AdminView() {
   const [newMandatoryTitle, setNewMandatoryTitle] = useState('');
   const [newMandatoryLink, setNewMandatoryLink] = useState('');
   
-  // New channel form
+  // Add Channel
   const [newChannelId, setNewChannelId] = useState('');
   const [newChannelTitle, setNewChannelTitle] = useState('');
+  const [newChannelImage, setNewChannelImage] = useState<string | null>(null);
 
-  // New plan form
+  // Add Plan form
   const [activeChannelForPlan, setActiveChannelForPlan] = useState<string | null>(null);
   const [newPlanName, setNewPlanName] = useState('');
   const [newPlanDesc, setNewPlanDesc] = useState('');
@@ -123,11 +124,12 @@ export default function AdminView() {
       const res = await fetch(`${API_URL}/admin/channels`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ id: newChannelId, title: newChannelTitle })
+        body: JSON.stringify({ id: newChannelId, title: newChannelTitle, image: newChannelImage })
       });
       if (res.ok) {
         setNewChannelId('');
         setNewChannelTitle('');
+        setNewChannelImage(null);
         fetchData();
       } else {
         const data = await res.json();
@@ -189,7 +191,7 @@ export default function AdminView() {
     }
   };
 
-  const compressAndSetImage = (file: File) => {
+  const compressImage = (file: File, callback: (base64: string) => void) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -217,11 +219,21 @@ export default function AdminView() {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        setBroadcastImageBase64(compressedBase64);
+        callback(compressedBase64);
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file, setBroadcastImageBase64);
+  };
+
+  const handleChannelImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file, setNewChannelImage);
   };
 
   const handleBroadcast = async (e: React.FormEvent) => {
@@ -582,12 +594,7 @@ export default function AdminView() {
                   type="file" 
                   id="broadcast-image-input"
                   accept="image/*" 
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      compressAndSetImage(file);
-                    }
-                  }} 
+                  onChange={handleImageUpload}
                   style={{ display: 'none' }} 
                 />
                 
@@ -1016,6 +1023,20 @@ export default function AdminView() {
                 placeholder="Kanal nomi (masalan: VIP Darslar)" 
                 value={newChannelTitle} onChange={e => setNewChannelTitle(e.target.value)} required 
               />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', padding: '10px 15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', flex: 1, justifyContent: 'center' }}>
+                  <Upload size={18} /> Kanal rasmi (ixtiyoriy)
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleChannelImageUpload} />
+                </label>
+              </div>
+              {newChannelImage && (
+                <div style={{ position: 'relative', width: '60px', height: '60px', marginBottom: '15px', borderRadius: '12px', overflow: 'hidden' }}>
+                  <img src={newChannelImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', padding: '2px', cursor: 'pointer' }} onClick={() => setNewChannelImage(null)}>
+                    <XCircle size={14} color="#fff" />
+                  </div>
+                </div>
+              )}
               <button type="submit" className="btn-small-glow" style={{ width: '100%', padding: '12px', justifyContent: 'center' }}>
                 <Plus size={18} style={{ marginRight: '5px' }} /> Qo'shish
               </button>

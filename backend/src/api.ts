@@ -185,10 +185,10 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
 
 // Add a new channel
 app.post('/api/admin/channels', requireAdmin, async (req, res) => {
-  const { id, title, adminId } = req.body;
+  const { id, title, adminId, image } = req.body;
   try {
     const channel = await prisma.channel.create({
-      data: { id, title, adminId: adminId || "12345" }
+      data: { id, title, image, adminId: adminId || "12345" }
     });
     res.json(channel);
   } catch (err) {

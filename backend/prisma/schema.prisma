@@ -17,6 +17,7 @@ model User {
 model Channel {
   id        String   @id // Telegram chat ID as string
   title     String
+  image     String?  // Base64 or URL
   adminId   String
   plans     Plan[]
   subs      Subscription[]
