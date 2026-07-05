@@ -581,11 +581,11 @@ export function startExpiryWarningCron() {
   });
 }
 
-// 3. Auto-cancel payments older than 2 minutes (every 1 minute)
+// 3. Auto-cancel payments older than 1.5 minutes (every 10 seconds)
 export function startPaymentTimeoutCron() {
   setInterval(async () => {
     try {
-      const timeoutDate = new Date(Date.now() - 2 * 60 * 1000);
+      const timeoutDate = new Date(Date.now() - 1.5 * 60 * 1000);
 
       const expiredPayments = await prisma.payment.findMany({
         where: {
@@ -613,12 +613,12 @@ export function startPaymentTimeoutCron() {
           } catch (err) {} // user blocked bot
         }
 
-        console.log(`[CRON] ${expiredPayments.length} ta to'lov 15 daqiqadan oshgani uchun bekor qilindi.`);
+        console.log(`Auto-cancelled ${expiredPayments.length} expired payments (older than 1.5m).`);
       }
     } catch (err) {
-      console.error('[CRON] Payment timeout error:', err);
+      console.error('Error in payment timeout cron:', err);
     }
-  }, 60 * 1000); // Every 1 minute
+  }, 10 * 1000); // Check every 10 seconds
 }
 
 // ============ ADMIN NOTIFICATION HELPER ============
