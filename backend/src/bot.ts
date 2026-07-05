@@ -598,7 +598,7 @@ export function startPaymentTimeoutCron() {
         await prisma.payment.updateMany({
           where: {
             status: 'PENDING',
-            createdAt: { lt: fifteenMinutesAgo }
+            createdAt: { lt: timeoutDate }
           },
           data: { status: 'CANCELLED' }
         });
@@ -608,7 +608,7 @@ export function startPaymentTimeoutCron() {
           try {
             await bot.telegram.sendMessage(
               pay.userId,
-              `⏰ To'lov muddati tugadi (15 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
+              `⏰ To'lov muddati tugadi (1.5 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
             );
           } catch (err) {} // user blocked bot
         }
