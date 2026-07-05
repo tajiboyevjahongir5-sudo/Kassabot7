@@ -581,16 +581,16 @@ export function startExpiryWarningCron() {
   });
 }
 
-// 3. Auto-cancel payments older than 15 minutes (every 1 minute)
+// 3. Auto-cancel payments older than 2 minutes (every 1 minute)
 export function startPaymentTimeoutCron() {
   setInterval(async () => {
     try {
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const timeoutDate = new Date(Date.now() - 2 * 60 * 1000);
 
       const expiredPayments = await prisma.payment.findMany({
         where: {
           status: 'PENDING',
-          createdAt: { lt: fifteenMinutesAgo }
+          createdAt: { lt: timeoutDate }
         }
       });
 
