@@ -77,7 +77,7 @@ bot.start(async (ctx) => {
 
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
   await ctx.reply(
-    '🌟 Salom! VIP kanallarga obuna bo\'lish va ularni boshqarish uchun pastdagi tugmani bosing.',
+    '🔞 Diora Admin botiga xush kelibsiz!\n\nVIP 18+ kanallarga qo\'shilish uchun pastdagi tugmani bosib obuna sotib oling!',
     Markup.inlineKeyboard([
       Markup.button.webApp('🚀 Obunalarni boshqarish', webAppUrl)
     ])
