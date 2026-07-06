@@ -585,7 +585,7 @@ export function startExpiryWarningCron() {
 export function startPaymentTimeoutCron() {
   setInterval(async () => {
     try {
-      const timeoutDate = new Date(Date.now() - 1.5 * 60 * 1000);
+      const timeoutDate = new Date(Date.now() - 3 * 60 * 1000);
 
       const expiredPayments = await prisma.payment.findMany({
         where: {
@@ -608,7 +608,7 @@ export function startPaymentTimeoutCron() {
           try {
             await bot.telegram.sendMessage(
               pay.userId,
-              `⏰ To'lov muddati tugadi (1.5 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
+              `⏰ To'lov muddati tugadi (3 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
             );
           } catch (err) {} // user blocked bot
         }

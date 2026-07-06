@@ -85,13 +85,13 @@ function UserView() {
       .catch(err => console.error(err));
   }, []);
 
-  const [timeLeft, setTimeLeft] = useState<number>(90);
+  const [timeLeft, setTimeLeft] = useState<number>(180);
 
   useEffect(() => {
     if (!activePayment) return;
 
     const createdAtTime = new Date(activePayment.createdAt).getTime();
-    const expiresAtTime = createdAtTime + 1.5 * 60 * 1000; // 1.5 minutes in ms
+    const expiresAtTime = createdAtTime + 3 * 60 * 1000; // 3 minutes in ms
 
     const updateTimer = () => {
       const now = Date.now();
