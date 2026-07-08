@@ -43,6 +43,7 @@ export default function AdminView() {
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentFilter, setPaymentFilter] = useState('PENDING');
   const [revenue, setRevenue] = useState({ totalRevenue: 0, totalPayments: 0 });
+  const [monthlyRevenue, setMonthlyRevenue] = useState<any[]>([]);
   
   // Cards
   const [cards, setCards] = useState<any[]>([]);
@@ -95,6 +96,10 @@ export default function AdminView() {
       if (revRes.ok) setRevenue(await revRes.json());
       if (cardsRes.ok) setCards(await cardsRes.json());
       if (mandRes.ok) setMandatoryChannels(await mandRes.json());
+
+      // Fetch monthly revenue separately
+      const monthlyRes = await fetch(`${API_URL}/admin/monthly-revenue`, { headers });
+      if (monthlyRes.ok) setMonthlyRevenue(await monthlyRes.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -379,6 +384,40 @@ export default function AdminView() {
                 <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>{revenue.totalPayments} ta tasdiqlangan to'lov</div>
               </div>
             </div>
+
+            {/* Monthly Revenue Breakdown */}
+            <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📅 Oylik daromad
+            </h3>
+            {monthlyRevenue.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                Hali tasdiqlangan to'lovlar yo'q
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {monthlyRevenue.map((m, i) => {
+                  const maxRev = Math.max(...monthlyRevenue.map(x => x.revenue));
+                  const pct = maxRev > 0 ? (m.revenue / maxRev) * 100 : 0;
+                  return (
+                    <div key={m.key} style={{ background: i === 0 ? 'rgba(0,255,102,0.07)' : 'rgba(255,255,255,0.03)', border: i === 0 ? '1px solid rgba(0,255,102,0.2)' : '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {i === 0 && <span style={{ fontSize: '10px', background: 'var(--accent-green)', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>JORIY</span>}
+                          <span style={{ fontWeight: '600', color: '#fff', fontSize: '14px' }}>{m.label}</span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: '700', color: i === 0 ? '#00ff66' : '#fff', fontSize: '15px' }}>{m.revenue.toLocaleString('ru-RU')} UZS</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{m.count} ta to'lov</div>
+                        </div>
+                      </div>
+                      <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: i === 0 ? 'linear-gradient(90deg, #00ff66, #00f0ff)' : 'linear-gradient(90deg, var(--accent), var(--accent-cyan))', borderRadius: '4px', transition: 'width 0.5s ease' }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

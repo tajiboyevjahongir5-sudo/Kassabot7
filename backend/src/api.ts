@@ -556,6 +556,40 @@ app.get('/api/admin/revenue', requireAdmin, async (req, res) => {
   }
 });
 
+// Get monthly revenue breakdown
+app.get('/api/admin/monthly-revenue', requireAdmin, async (req, res) => {
+  try {
+    const completedPayments = await prisma.payment.findMany({
+      where: { status: 'COMPLETED' },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const monthlyMap: Record<string, { revenue: number; count: number }> = {};
+    const MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+
+    for (const p of completedPayments) {
+      const d = new Date(p.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+      if (!monthlyMap[key]) monthlyMap[key] = { revenue: 0, count: 0 };
+      monthlyMap[key].revenue += p.amount;
+      monthlyMap[key].count += 1;
+    }
+
+    const result = Object.entries(monthlyMap)
+      .sort(([a], [b]) => b.localeCompare(a)) // newest first
+      .map(([key, val]) => {
+        const [year, month] = key.split('-');
+        const label = `${MONTHS[parseInt(month) - 1]} ${year}`;
+        return { key, label, ...val };
+      });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get monthly revenue' });
+  }
+});
+
 // === Promo Code CRUD ===
 app.get('/api/admin/promos', requireAdmin, async (req, res) => {
   try {
