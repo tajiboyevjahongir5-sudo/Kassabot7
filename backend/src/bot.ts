@@ -77,10 +77,13 @@ bot.start(async (ctx) => {
 
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
   await ctx.reply(
-    '🔞 Diora Admin botiga xush kelibsiz!\n\nVIP 18+ kanallarga qo\'shilish uchun pastdagi tugmani bosib obuna sotib oling!',
-    Markup.inlineKeyboard([
-      Markup.button.webApp('🚀 Obunalarni boshqarish', webAppUrl)
-    ])
+    `👋 *Diora Vip kanaliga qo'shilmoqchi bo'lsangiz pastdagi tugma orqali obuna sotib oling*`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }]]
+      }
+    }
   );
 });
 
