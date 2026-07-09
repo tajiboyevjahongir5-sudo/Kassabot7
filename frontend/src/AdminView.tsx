@@ -968,15 +968,23 @@ export default function AdminView() {
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <button onClick={async () => {
                         const newTitle = prompt('Kanalning yangi nomini kiriting:', channel.title);
-                        if (newTitle && newTitle !== channel.title) {
+                        if (newTitle === null) return;
+                        const newId = prompt('Kanalning yangi ID raqamini kiriting (Masalan: -10012345678):', channel.id);
+                        if (newId === null) return;
+                        
+                        if (newTitle !== channel.title || newId !== channel.id) {
                           const res = await fetch(`${API_URL}/admin/channels/${channel.id}`, {
                             method: 'PUT',
                             headers,
-                            body: JSON.stringify({ title: newTitle })
+                            body: JSON.stringify({ title: newTitle || channel.title, id: newId || channel.id })
                           });
                           if (res.ok) fetchData();
+                          else {
+                            const data = await res.json().catch(() => ({}));
+                            alert(data.error || 'Xatolik yuz berdi. Bu ID band bo\'lishi mumkin.');
+                          }
                         }
-                      }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer' }} title="Nomini o'zgartirish">
+                      }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer' }} title="Tahrirlash">
                         <Edit2 size={18} />
                       </button>
                       <button onClick={() => handleDeleteChannel(channel.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }} title="O'chirish">

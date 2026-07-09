@@ -229,11 +229,14 @@ app.post('/api/admin/channels', requireAdmin, async (req, res) => {
 // Edit a channel
 app.put('/api/admin/channels/:id', requireAdmin, async (req, res) => {
   try {
-    const id = req.params.id as string;
-    const { title } = req.body;
+    const oldId = req.params.id as string;
+    const { title, id: newId } = req.body;
     const channel = await prisma.channel.update({
-      where: { id },
-      data: { title }
+      where: { id: oldId },
+      data: { 
+        ...(title && { title }),
+        ...(newId && { id: newId }) 
+      }
     });
     res.json(channel);
   } catch (err) {
