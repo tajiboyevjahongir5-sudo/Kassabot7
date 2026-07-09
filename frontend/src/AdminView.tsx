@@ -150,6 +150,10 @@ export default function AdminView() {
     try {
       const res = await fetch(`${API_URL}/admin/channels/${id}`, { method: 'DELETE', headers });
       if (res.ok) fetchData();
+      else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Error deleting channel');
+      }
     } catch (err) {
       alert('Error deleting channel');
     }
@@ -191,6 +195,10 @@ export default function AdminView() {
     try {
       const res = await fetch(`${API_URL}/admin/plans/${id}`, { method: 'DELETE', headers });
       if (res.ok) fetchData();
+      else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Error deleting plan');
+      }
     } catch (err) {
       alert('Error deleting plan');
     }
