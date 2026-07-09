@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2 } from 'lucide-react';
 import './index.css';
 
 
@@ -957,9 +957,24 @@ export default function AdminView() {
                       <h2 style={{ fontSize: '16px', color: '#fff' }}>{channel.title}</h2>
                       <p style={{ opacity: 0.6, fontSize: '11px' }}>ID: {channel.id}</p>
                     </div>
-                    <button onClick={() => handleDeleteChannel(channel.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                      <Trash2 size={18} />
-                    </button>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={async () => {
+                        const newTitle = prompt('Kanalning yangi nomini kiriting:', channel.title);
+                        if (newTitle && newTitle !== channel.title) {
+                          const res = await fetch(`${API_URL}/admin/channels/${channel.id}`, {
+                            method: 'PUT',
+                            headers,
+                            body: JSON.stringify({ title: newTitle })
+                          });
+                          if (res.ok) fetchData();
+                        }
+                      }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer' }} title="Nomini o'zgartirish">
+                        <Edit2 size={18} />
+                      </button>
+                      <button onClick={() => handleDeleteChannel(channel.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }} title="O'chirish">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Plans */}
@@ -973,9 +988,24 @@ export default function AdminView() {
                           <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#fff' }}>{plan.name}</div>
                           <div style={{ fontSize: '12px', color: 'var(--accent)' }}>{plan.price.toLocaleString('ru-RU')} UZS / {plan.duration === 0 ? 'Butun umrlik' : `${plan.duration} kun`}</div>
                         </div>
-                        <button onClick={() => handleDeletePlan(plan.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                          <Trash2 size={16} />
-                        </button>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button onClick={async () => {
+                            const newPrice = prompt(`"${plan.name}" uchun yangi narxni kiriting (UZS):`, plan.price.toString());
+                            if (newPrice !== null && !isNaN(Number(newPrice)) && newPrice.trim() !== '') {
+                              const res = await fetch(`${API_URL}/admin/plans/${plan.id}`, {
+                                method: 'PUT',
+                                headers,
+                                body: JSON.stringify({ price: Number(newPrice) })
+                              });
+                              if (res.ok) fetchData();
+                            }
+                          }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer' }} title="Narxini o'zgartirish">
+                            <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => handleDeletePlan(plan.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }} title="O'chirish">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     ))}
 

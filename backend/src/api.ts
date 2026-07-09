@@ -196,6 +196,21 @@ app.post('/api/admin/channels', requireAdmin, async (req, res) => {
   }
 });
 
+// Edit a channel
+app.put('/api/admin/channels/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id as string;
+    const { title } = req.body;
+    const channel = await prisma.channel.update({
+      where: { id },
+      data: { title }
+    });
+    res.json(channel);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update channel' });
+  }
+});
+
 // Delete a channel
 app.delete('/api/admin/channels/:id', requireAdmin, async (req, res) => {
   try {
@@ -227,6 +242,26 @@ app.post('/api/admin/channels/:channelId/plans', requireAdmin, async (req, res) 
     res.json(plan);
   } catch (err) {
     res.status(500).json({ error: 'Failed to add plan' });
+  }
+});
+
+// Edit a plan
+app.put('/api/admin/plans/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, description, price, duration } = req.body;
+    const plan = await prisma.plan.update({
+      where: { id },
+      data: { 
+        ...(name && { name }), 
+        ...(description !== undefined && { description }), 
+        ...(price !== undefined && { price: Number(price) }), 
+        ...(duration !== undefined && { duration: Number(duration) }) 
+      }
+    });
+    res.json(plan);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update plan' });
   }
 });
 
