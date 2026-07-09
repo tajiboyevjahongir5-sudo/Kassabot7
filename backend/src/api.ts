@@ -191,33 +191,21 @@ app.post('/api/create-payment', async (req, res) => {
 // Admin Middleware
 import { validateWebAppData } from './utils/telegramAuth';
 
-// Automatically restore lost revenue
+// Hide the restored revenue dummy plan from users
 setTimeout(async () => {
   try {
     const dummyPlanName = "Restored Revenue Plan";
-    const existing = await prisma.plan.findFirst({ where: { name: dummyPlanName } });
-    if (!existing) {
-      let channel = await prisma.channel.findFirst();
-      if (!channel) {
-        channel = await prisma.channel.create({ data: { id: "deleted_history", title: "O'chirilgan Kanallar Tarixi", adminId: "admin" } });
-      }
-      const plan = await prisma.plan.create({
-        data: { name: dummyPlanName, channelId: channel.id, price: 1142479, duration: 0, priceType: 'UZS' }
-      });
-      let user = await prisma.user.findFirst();
-      if (!user) user = await prisma.user.create({ data: { id: "system_restore", name: "System" } });
-      
-      await prisma.payment.createMany({
-        data: [
-          { userId: user.id, planId: plan.id, amount: 380826, status: 'COMPLETED' },
-          { userId: user.id, planId: plan.id, amount: 380826, status: 'COMPLETED' },
-          { userId: user.id, planId: plan.id, amount: 380827, status: 'COMPLETED' },
-        ]
-      });
-      console.log("Revenue restored successfully.");
+    const existingPlan = await prisma.plan.findFirst({ where: { name: dummyPlanName } });
+    if (existingPlan && !existingPlan.isDeleted) {
+      await prisma.plan.update({ where: { id: existingPlan.id }, data: { isDeleted: true } });
     }
+    const dummyChannel = await prisma.channel.findFirst({ where: { id: "deleted_history" } });
+    if (dummyChannel && !dummyChannel.isDeleted) {
+      await prisma.channel.update({ where: { id: dummyChannel.id }, data: { isDeleted: true } });
+    }
+    console.log("Hidden dummy plan and channel.");
   } catch (err) {
-    console.error("Failed to restore revenue:", err);
+    console.error(err);
   }
 }, 5000);
 // --- Admin Routes ---
