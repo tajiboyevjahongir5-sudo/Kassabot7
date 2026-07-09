@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2 } from 'lucide-react';
 import './index.css';
 
@@ -854,14 +854,14 @@ export default function AdminView() {
                 onChange={e => setUsersSearch(e.target.value)}
                 onKeyDown={async e => {
                   if (e.key === 'Enter') {
-                    const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                    const hdrs = {'x-telegram-init-data': (window as any).Telegram?.WebApp?.initData || ''};
                     const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=1`, { headers: hdrs });
                     if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersTotal(d.total||0); setUsersTotalPages(d.totalPages||1); setUsersPage(1); }
                   }
                 }}
               />
               <button className="btn-primary" style={{ padding: '0 14px', fontSize: '13px' }} onClick={async () => {
-                const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                const hdrs = {'x-telegram-init-data': (window as any).Telegram?.WebApp?.initData || ''};
                 const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=1`, { headers: hdrs });
                 if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersTotal(d.total||0); setUsersTotalPages(d.totalPages||1); setUsersPage(1); }
               }}>Qidir</button>
@@ -992,7 +992,7 @@ export default function AdminView() {
                   style={{ opacity: usersPage <= 1 ? 0.4 : 1, padding: '8px 20px' }}
                   onClick={async () => {
                     const newPage = usersPage - 1;
-                    const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                    const hdrs = {'x-telegram-init-data': (window as any).Telegram?.WebApp?.initData || ''};
                     const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=${newPage}`, { headers: hdrs });
                     if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersPage(newPage); setUsersTotalPages(d.totalPages||1); setUsersTotal(d.total||0); }
                   }}
@@ -1004,7 +1004,7 @@ export default function AdminView() {
                   style={{ opacity: usersPage >= usersTotalPages ? 0.4 : 1, padding: '8px 20px' }}
                   onClick={async () => {
                     const newPage = usersPage + 1;
-                    const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                    const hdrs = {'x-telegram-init-data': (window as any).Telegram?.WebApp?.initData || ''};
                     const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=${newPage}`, { headers: hdrs });
                     if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersPage(newPage); setUsersTotalPages(d.totalPages||1); setUsersTotal(d.total||0); }
                   }}
