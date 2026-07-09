@@ -269,10 +269,11 @@ app.post('/api/admin/settings', requireAdmin, async (req, res) => {
   }
 });
 
-// Get users
+// Get users (Limit to recent 100 to prevent crashing)
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const users = await prisma.user.findMany({
+      take: 100,
       include: { subs: { include: { channel: true } } }
     });
     res.json(users);
@@ -526,13 +527,14 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
   }
 });
 
-// Get payments (with optional status filter)
+// Get payments (with optional status filter, limited to 100 to prevent crash)
 app.get('/api/admin/payments', requireAdmin, async (req, res) => {
   try {
     const status = req.query.status as string | undefined;
     const where = status && status !== 'ALL' ? { status } : {};
     const payments = await prisma.payment.findMany({
       where,
+      take: 100,
       include: { user: true, plan: true },
       orderBy: { createdAt: 'desc' }
     });
