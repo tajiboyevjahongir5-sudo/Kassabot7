@@ -18,16 +18,38 @@ app.get('/health', (req, res) => {
 
 // Serve static files from frontend build is handled at the bottom of the file
 
-// Get all channels and their plans
+// Get all channels (public)
 app.get('/api/channels', async (req, res) => {
   try {
     const channels = await prisma.channel.findMany({
-      include: { plans: true }
+      where: { isDeleted: false },
+      include: { 
+        plans: {
+          where: { isDeleted: false }
+        } 
+      }
     });
     res.json(channels);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get all channels (admin)
+app.get('/api/admin/channels', requireAdmin, async (req, res) => {
+  try {
+    const channels = await prisma.channel.findMany({
+      where: { isDeleted: false },
+      include: { 
+        plans: {
+          where: { isDeleted: false }
+        } 
+      }
+    });
+    res.json(channels);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get channels' });
   }
 });
 
@@ -244,24 +266,15 @@ app.put('/api/admin/channels/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Delete a channel
+// Delete a channel (Soft Delete)
 app.delete('/api/admin/channels/:id', requireAdmin, async (req, res) => {
   try {
     const id = req.params.id as string;
     
-    // Check if channel has completed payments
-    const plans = await prisma.plan.findMany({ where: { channelId: id }, select: { id: true } });
-    if (plans.length > 0) {
-      const planIds = plans.map((p: any) => p.id);
-      const paymentsCount = await prisma.payment.count({ where: { planId: { in: planIds }, status: 'COMPLETED' } });
-      if (paymentsCount > 0) {
-        return res.status(400).json({ error: 'Bu kanalda tasdiqlangan to\'lovlar mavjud! Statistikani yo\'qotmaslik uchun uni o\'chirish taqiqlanadi. Iltimos, faqat Tahrirlash tugmasidan foydalaning.' });
-      }
-    }
+    // Soft delete channel and its plans
+    await prisma.plan.updateMany({ where: { channelId: id }, data: { isDeleted: true } });
+    await prisma.channel.update({ where: { id: id }, data: { isDeleted: true } });
     
-    await prisma.plan.deleteMany({ where: { channelId: id } });
-    await prisma.subscription.deleteMany({ where: { channelId: id } });
-    await prisma.channel.delete({ where: { id: id } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete channel' });
@@ -309,16 +322,11 @@ app.put('/api/admin/plans/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Delete a plan
+// Delete a plan (Soft Delete)
 app.delete('/api/admin/plans/:id', requireAdmin, async (req, res) => {
   try {
     const planId = Number(req.params.id);
-    const paymentsCount = await prisma.payment.count({ where: { planId, status: 'COMPLETED' } });
-    if (paymentsCount > 0) {
-      return res.status(400).json({ error: 'Bu tarif bo\'yicha tasdiqlangan to\'lovlar mavjud! Daromad 0 ga tushib ketmasligi uchun uni o\'chirish taqiqlanadi. Iltimos, tarif narxini va nomini tahrirlang xolos.' });
-    }
-    await prisma.payment.deleteMany({ where: { planId } });
-    await prisma.plan.delete({ where: { id: planId } });
+    await prisma.plan.update({ where: { id: planId }, data: { isDeleted: true } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete plan' });

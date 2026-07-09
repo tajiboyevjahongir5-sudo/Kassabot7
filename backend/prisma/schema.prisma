@@ -19,6 +19,7 @@ model Channel {
   title     String
   image     String?  // Base64 or URL
   adminId   String
+  isDeleted Boolean  @default(false)
   plans     Plan[]
   subs      Subscription[]
 }
@@ -32,6 +33,7 @@ model Plan {
   price       Int      // Price
   priceType   String   @default("UZS") // Changed to UZS
   duration    Int      // Duration in days
+  isDeleted   Boolean  @default(false)
   payments    Payment[]
 }
 
