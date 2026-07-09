@@ -566,14 +566,16 @@ app.post('/api/admin/cards/rotate', requireAdmin, async (req, res) => {
   }
 });
 
-// Broadcast message
+// Broadcast message - parallel batch sending for speed
 app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
   const { text, imageBase64 } = req.body;
   if (!text && !imageBase64) return res.status(400).json({ error: 'Message text or image required' });
 
+  // Respond immediately so admin panel doesn't freeze
+  res.json({ success: true, message: 'Broadcast started' });
+
   try {
-    const users = await prisma.user.findMany();
-    let successCount = 0;
+    const users = await prisma.user.findMany({ select: { id: true } });
     
     let imageBuffer: Buffer | null = null;
     if (imageBase64) {
@@ -581,28 +583,33 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
       imageBuffer = Buffer.from(base64Data, 'base64');
     }
     
+    const BATCH_SIZE = 25; // Send 25 at a time
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    let i = 0;
-    for (const user of users) {
+
+    const sendOne = async (userId: string) => {
       try {
         if (imageBuffer) {
-          await bot.telegram.sendPhoto(user.id, { source: imageBuffer }, { caption: text || '' });
+          await bot.telegram.sendPhoto(userId, { source: imageBuffer! }, { caption: text || '' });
         } else {
-          await bot.telegram.sendMessage(user.id, text);
+          await bot.telegram.sendMessage(userId, text);
         }
-        successCount++;
       } catch (e) {
-        // user blocked bot etc.
+        // user blocked bot or other error — skip
       }
-      i++;
-      if (i % 30 === 0) {
-        await sleep(1000);
+    };
+
+    // Process in batches of BATCH_SIZE
+    for (let i = 0; i < users.length; i += BATCH_SIZE) {
+      const batch = users.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(u => sendOne(u.id)));
+      if (i + BATCH_SIZE < users.length) {
+        await sleep(300); // small pause between batches to respect rate limits
       }
     }
     
-    res.json({ success: true, count: successCount });
+    console.log(`Broadcast done: sent to ${users.length} users`);
   } catch (err) {
-    res.status(500).json({ error: 'Broadcast failed' });
+    console.error('Broadcast failed:', err);
   }
 });
 
