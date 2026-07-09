@@ -248,7 +248,7 @@ app.post('/api/admin/channels/:channelId/plans', requireAdmin, async (req, res) 
 // Edit a plan
 app.put('/api/admin/plans/:id', requireAdmin, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const { name, description, price, duration } = req.body;
     const plan = await prisma.plan.update({
       where: { id },
