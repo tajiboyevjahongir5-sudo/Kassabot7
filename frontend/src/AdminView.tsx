@@ -820,7 +820,10 @@ export default function AdminView() {
               <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 Foydalanuvchilar <span style={{ width: '60px', height: '2px', background: 'linear-gradient(90deg, var(--accent-cyan), transparent)' }}></span>
               </h2>
-              <span style={{ color: 'var(--accent-cyan)', fontSize: '14px', fontWeight: '500' }}>{users.length} ta</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ color: 'var(--accent-cyan)', fontSize: '14px', fontWeight: '500' }}>Jami: {stats.totalUsers} ta</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>(Oxirgi 100 tasi ro'yxatda)</span>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {users.map(user => {
