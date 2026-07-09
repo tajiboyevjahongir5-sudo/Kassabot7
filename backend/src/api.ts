@@ -18,6 +18,32 @@ app.get('/health', (req, res) => {
 
 // Serve static files from frontend build is handled at the bottom of the file
 
+const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Check local development bypass or real telegram auth
+  const isLocalHost = req.hostname === 'localhost';
+  if (isLocalHost && process.env.NODE_ENV !== 'production') {
+    return next(); // Bypass for local dev testing if needed
+  }
+
+  const initData = req.headers['x-telegram-init-data'] as string;
+  const botToken = process.env.BOT_TOKEN;
+  const adminIdEnv = process.env.ADMIN_ID; // Comma-separated admin IDs
+
+  if (!initData || !botToken) {
+    return res.status(401).json({ error: 'Unauthorized: Missing initData or token' });
+  }
+
+  const user = validateWebAppData(initData, botToken);
+  
+  // Parse comma-separated admin IDs and check
+  const adminIds = adminIdEnv ? adminIdEnv.split(',').map(id => id.trim()) : [];
+  if (!user || (adminIds.length > 0 && !adminIds.includes(user.id?.toString()))) {
+    return res.status(403).json({ error: 'Forbidden: You are not the admin' });
+  }
+
+  next();
+};
+
 // Get all channels (public)
 app.get('/api/channels', async (req, res) => {
   try {
@@ -194,33 +220,6 @@ setTimeout(async () => {
     console.error("Failed to restore revenue:", err);
   }
 }, 5000);
-
-const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Check local development bypass or real telegram auth
-  const isLocalHost = req.hostname === 'localhost';
-  if (isLocalHost && process.env.NODE_ENV !== 'production') {
-    return next(); // Bypass for local dev testing if needed
-  }
-
-  const initData = req.headers['x-telegram-init-data'] as string;
-  const botToken = process.env.BOT_TOKEN;
-  const adminIdEnv = process.env.ADMIN_ID; // Comma-separated admin IDs
-
-  if (!initData || !botToken) {
-    return res.status(401).json({ error: 'Unauthorized: Missing initData or token' });
-  }
-
-  const user = validateWebAppData(initData, botToken);
-  
-  // Parse comma-separated admin IDs and check
-  const adminIds = adminIdEnv ? adminIdEnv.split(',').map(id => id.trim()) : [];
-  if (!user || (adminIds.length > 0 && !adminIds.includes(user.id?.toString()))) {
-    return res.status(403).json({ error: 'Forbidden: You are not the admin' });
-  }
-
-  next();
-};
-
 // --- Admin Routes ---
 
 // Get basic stats
