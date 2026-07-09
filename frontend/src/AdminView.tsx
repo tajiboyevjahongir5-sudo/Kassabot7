@@ -40,6 +40,10 @@ export default function AdminView() {
 
   // Users, Payments, Revenue
   const [users, setUsers] = useState<any[]>([]);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersTotalPages, setUsersTotalPages] = useState(1);
+  const [usersSearch, setUsersSearch] = useState('');
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentFilter, setPaymentFilter] = useState('PENDING');
   const [revenue, setRevenue] = useState({ totalRevenue: 0, totalPayments: 0 });
@@ -91,7 +95,16 @@ export default function AdminView() {
       if (chRes.ok) setChannels(await chRes.json());
       if (stRes.ok) setStats(await stRes.json());
       if (setRes.ok) setSettings(await setRes.json());
-      if (usrRes.ok) setUsers(await usrRes.json());
+      if (usrRes.ok) {
+        const usrData = await usrRes.json();
+        if (Array.isArray(usrData)) {
+          setUsers(usrData);
+        } else {
+          setUsers(usrData.users || []);
+          setUsersTotal(usrData.total || 0);
+          setUsersTotalPages(usrData.totalPages || 1);
+        }
+      }
       if (payRes.ok) setPayments(await payRes.json());
       if (revRes.ok) setRevenue(await revRes.json());
       if (cardsRes.ok) setCards(await cardsRes.json());
@@ -824,16 +837,38 @@ export default function AdminView() {
 
         {activeTab === 'users' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                Foydalanuvchilar <span style={{ width: '60px', height: '2px', background: 'linear-gradient(90deg, var(--accent-cyan), transparent)' }}></span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>
+                Foydalanuvchilar
               </h2>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ color: 'var(--accent-cyan)', fontSize: '14px', fontWeight: '500' }}>Jami: {stats.totalUsers} ta</span>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>(Oxirgi 100 tasi ro'yxatda)</span>
-              </div>
+              <span style={{ color: 'var(--accent-cyan)', fontSize: '14px', fontWeight: '500' }}>Jami: {usersTotal || stats.totalUsers} ta</span>
             </div>
+
+            {/* Search */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <input
+                className="cyber-input"
+                style={{ flex: 1 }}
+                placeholder="Ism yoki username bo'yicha qidirish..."
+                value={usersSearch}
+                onChange={e => setUsersSearch(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter') {
+                    const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                    const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=1`, { headers: hdrs });
+                    if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersTotal(d.total||0); setUsersTotalPages(d.totalPages||1); setUsersPage(1); }
+                  }
+                }}
+              />
+              <button className="btn-primary" style={{ padding: '0 14px', fontSize: '13px' }} onClick={async () => {
+                const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=1`, { headers: hdrs });
+                if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersTotal(d.total||0); setUsersTotalPages(d.totalPages||1); setUsersPage(1); }
+              }}>Qidir</button>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
               {users.map(user => {
                 const joinedDate = new Date(user.createdAt || Date.now()).toLocaleDateString('uz-UZ');
                 const profileUrl = user.username ? `https://t.me/${user.username}` : `tg://user?id=${user.id}`;
@@ -947,6 +982,35 @@ export default function AdminView() {
                 );
               })}
             </div>
+
+            {/* Pagination */}
+            {usersTotalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '20px' }}>
+                <button
+                  className="btn-primary"
+                  disabled={usersPage <= 1}
+                  style={{ opacity: usersPage <= 1 ? 0.4 : 1, padding: '8px 20px' }}
+                  onClick={async () => {
+                    const newPage = usersPage - 1;
+                    const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                    const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=${newPage}`, { headers: hdrs });
+                    if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersPage(newPage); setUsersTotalPages(d.totalPages||1); setUsersTotal(d.total||0); }
+                  }}
+                >← Oldingi</button>
+                <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{usersPage} / {usersTotalPages}</span>
+                <button
+                  className="btn-primary"
+                  disabled={usersPage >= usersTotalPages}
+                  style={{ opacity: usersPage >= usersTotalPages ? 0.4 : 1, padding: '8px 20px' }}
+                  onClick={async () => {
+                    const newPage = usersPage + 1;
+                    const hdrs = {'x-telegram-init-data': window.Telegram?.WebApp?.initData || ''};
+                    const r = await fetch(`${API_URL}/admin/users?search=${encodeURIComponent(usersSearch)}&page=${newPage}`, { headers: hdrs });
+                    if (r.ok) { const d = await r.json(); setUsers(d.users||[]); setUsersPage(newPage); setUsersTotalPages(d.totalPages||1); setUsersTotal(d.total||0); }
+                  }}
+                >Keyingi →</button>
+              </div>
+            )}
           </div>
         )}
 

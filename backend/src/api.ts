@@ -1,14 +1,21 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
+import NodeCache from 'node-cache';
 import { prisma } from './prisma';
 import { bot } from './bot';
 
 import path from 'path';
 
+// In-memory cache — TTL 30 seconds for stats, 5 mins for channels
+const cache = new NodeCache({ stdTTL: 30, checkperiod: 10, useClones: false });
+
 export const app = express();
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(compression()); // gzip all responses — reduces bandwidth up to 70%
+app.use(express.json({ limit: '10mb' }));  // reduced from 50mb — no need for huge payloads
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
 
 
 // Health check route for Railway (must be BEFORE static files to avoid libuv thread pool exhaustion)
@@ -210,13 +217,19 @@ setTimeout(async () => {
 }, 5000);
 // --- Admin Routes ---
 
-// Get basic stats
+// Get basic stats (cached 20s)
 app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  const cached = cache.get('stats');
+  if (cached) return res.json(cached);
   try {
-    const totalUsers = await prisma.user.count();
-    const activeSubs = await prisma.subscription.count({ where: { status: 'ACTIVE' } });
-    const totalChannels = await prisma.channel.count();
-    res.json({ totalUsers, activeSubs, totalChannels });
+    const [totalUsers, activeSubs, totalChannels] = await Promise.all([
+      prisma.user.count(),
+      prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+      prisma.channel.count({ where: { isDeleted: false } }),
+    ]);
+    const result = { totalUsers, activeSubs, totalChannels };
+    cache.set('stats', result, 20);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -348,14 +361,34 @@ app.post('/api/admin/settings', requireAdmin, async (req, res) => {
   }
 });
 
-// Get users (Limit to recent 100 to prevent crashing)
+// Get users — paginated (50 per page), with optional search
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      take: 100,
-      include: { subs: { include: { channel: true } } }
-    });
-    res.json(users);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = 50;
+    const skip = (page - 1) * limit;
+    const search = req.query.search as string | undefined;
+
+    const where = search ? {
+      OR: [
+        { id: { contains: search } },
+        { username: { contains: search } },
+        { firstName: { contains: search } },
+      ]
+    } : {};
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { id: 'desc' },
+        include: { subs: { include: { channel: { select: { title: true, id: true } } } } }
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    res.json({ users, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get users' });
   }
@@ -630,22 +663,31 @@ app.get('/api/admin/payments', requireAdmin, async (req, res) => {
   }
 });
 
-// Get revenue stats
+// Get revenue stats — use DB-level SUM, cached 30s
 app.get('/api/admin/revenue', requireAdmin, async (req, res) => {
+  const cached = cache.get('revenue');
+  if (cached) return res.json(cached);
   try {
-    const completedPayments = await prisma.payment.findMany({
-      where: { status: 'COMPLETED' }
+    const agg = await prisma.payment.aggregate({
+      where: { status: 'COMPLETED' },
+      _sum: { amount: true },
+      _count: { id: true }
     });
-    const totalRevenue = completedPayments.reduce((sum, p) => sum + p.amount, 0);
-    const totalPayments = completedPayments.length;
-    res.json({ totalRevenue, totalPayments });
+    const result = { 
+      totalRevenue: agg._sum.amount ?? 0, 
+      totalPayments: agg._count.id 
+    };
+    cache.set('revenue', result, 30);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: 'Failed to get revenue' });
   }
 });
 
-// Get monthly revenue breakdown
+// Get monthly revenue breakdown (cached 60s)
 app.get('/api/admin/monthly-revenue', requireAdmin, async (req, res) => {
+  const cached = cache.get('monthly-revenue');
+  if (cached) return res.json(cached);
   try {
     const completedPayments = await prisma.payment.findMany({
       where: { status: 'COMPLETED' },
@@ -672,6 +714,7 @@ app.get('/api/admin/monthly-revenue', requireAdmin, async (req, res) => {
         return { key, label, ...val };
       });
 
+    cache.set('monthly-revenue', result, 60);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: 'Failed to get monthly revenue' });
@@ -797,6 +840,9 @@ app.post('/api/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
         );
       } catch (e) {} // ignore if user blocked
     }
+
+    // Invalidate caches so stats reflect new payment immediately
+    cache.del(['revenue', 'monthly-revenue', 'stats']);
 
     res.json({ success: true });
   } catch (err) {
