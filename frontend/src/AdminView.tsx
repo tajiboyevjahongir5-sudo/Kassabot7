@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2 } from 'lucide-react';
 import './index.css';
 
@@ -61,6 +61,7 @@ export default function AdminView() {
   const [newMandatoryId, setNewMandatoryId] = useState('');
   const [newMandatoryTitle, setNewMandatoryTitle] = useState('');
   const [newMandatoryLink, setNewMandatoryLink] = useState('');
+  const [newMandatoryType, setNewMandatoryType] = useState('CHANNEL');
   
   // Add Channel
   const [newChannelId, setNewChannelId] = useState('');
@@ -591,8 +592,13 @@ export default function AdminView() {
                 {mandatoryChannels.map((ch: any) => (
                   <div key={ch.id} className="credit-card-item" style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '2px' }}>{ch.title}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{ch.channelId}</div>
+                      <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {ch.type === 'BOT' ? <Box size={14} color="#3b82f6"/> : <Crown size={14} color="#eab308"/>}
+                        {ch.title}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        {ch.type === 'BOT' ? `Log Kanal: ${ch.channelId}` : `ID: ${ch.channelId}`}
+                      </div>
                       {ch.inviteLink && <div style={{ fontSize: '11px', color: 'var(--accent-cyan)', marginTop: '2px' }}>{ch.inviteLink}</div>}
                     </div>
                     <button
@@ -615,10 +621,14 @@ export default function AdminView() {
               </div>
             ) : (
               <div style={{ padding: '18px', background: 'rgba(20, 22, 35, 0.8)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <h4 style={{ fontSize: '14px', color: '#e0b3ff', margin: 0 }}>Yangi kanal qo'shish</h4>
-                <input className="cyber-input" style={{ width: '100%' }} placeholder="Kanal ID (-100... yoki @username)" value={newMandatoryId} onChange={e => setNewMandatoryId(e.target.value)} />
-                <input className="cyber-input" style={{ width: '100%' }} placeholder="Kanal nomi (ko'rsatiladigan nom)" value={newMandatoryTitle} onChange={e => setNewMandatoryTitle(e.target.value)} />
-                <input className="cyber-input" style={{ width: '100%' }} placeholder="Invite link (ixtiyoriy: https://t.me/...)" value={newMandatoryLink} onChange={e => setNewMandatoryLink(e.target.value)} />
+                <h4 style={{ fontSize: '14px', color: '#e0b3ff', margin: 0 }}>Yangi kanal yoki bot qo'shish</h4>
+                <select className="cyber-input" style={{ width: '100%', appearance: 'none' }} value={newMandatoryType} onChange={e => setNewMandatoryType(e.target.value)}>
+                  <option value="CHANNEL" style={{ background: '#111' }}>Oddiy Kanal / Guruh</option>
+                  <option value="BOT" style={{ background: '#111' }}>Telegram Bot (Log orqali)</option>
+                </select>
+                <input className="cyber-input" style={{ width: '100%' }} placeholder={newMandatoryType === 'BOT' ? "Botning ma'lumot tushadigan LOG KANAL ID si (-100...)" : "Kanal ID (-100... yoki @username)"} value={newMandatoryId} onChange={e => setNewMandatoryId(e.target.value)} />
+                <input className="cyber-input" style={{ width: '100%' }} placeholder={newMandatoryType === 'BOT' ? "Botning nomi (ko'rsatiladigan nom)" : "Kanal nomi (ko'rsatiladigan nom)"} value={newMandatoryTitle} onChange={e => setNewMandatoryTitle(e.target.value)} />
+                <input className="cyber-input" style={{ width: '100%' }} placeholder={newMandatoryType === 'BOT' ? "Bot manzili (https://t.me/bot)" : "Invite link (ixtiyoriy: https://t.me/...)"} value={newMandatoryLink} onChange={e => setNewMandatoryLink(e.target.value)} />
                 <button
                   className="neon-btn"
                   style={{ width: '100%' }}
@@ -627,7 +637,7 @@ export default function AdminView() {
                     const res = await fetch(`${API_URL}/admin/mandatory-channels`, {
                       method: 'POST',
                       headers,
-                      body: JSON.stringify({ channelId: newMandatoryId, title: newMandatoryTitle, inviteLink: newMandatoryLink || null })
+                      body: JSON.stringify({ channelId: newMandatoryId, title: newMandatoryTitle, inviteLink: newMandatoryLink || null, type: newMandatoryType })
                     });
                     const data = await res.json();
                     if (res.ok) {

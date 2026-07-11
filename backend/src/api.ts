@@ -422,12 +422,12 @@ app.post('/api/admin/mandatory-channels', requireAdmin, async (req, res) => {
     if (count >= 10) {
       return res.status(400).json({ error: 'Maksimum 10 ta majburiy kanal qo\'shish mumkin' });
     }
-    const { channelId, title, inviteLink } = req.body;
+    const { channelId, title, inviteLink, type } = req.body;
     if (!channelId || !title) {
       return res.status(400).json({ error: 'channelId va title majburiy' });
     }
     const channel = await prisma.mandatoryChannel.create({
-      data: { channelId: channelId.toString(), title, inviteLink: inviteLink || null, order: count }
+      data: { channelId: channelId.toString(), title, inviteLink: inviteLink || null, type: type || 'CHANNEL', order: count }
     });
     res.json(channel);
   } catch (err: any) {
@@ -457,14 +457,21 @@ app.get('/api/check-mandatory/:userId', async (req, res) => {
     const missing: any[] = [];
     for (const ch of mandatoryChannels) {
       try {
-        const member = await bot.telegram.getChatMember(ch.channelId, Number(userId));
-        const status = member.status;
-        if (!['member', 'administrator', 'creator'].includes(status)) {
-          missing.push({ id: ch.id, channelId: ch.channelId, title: ch.title, inviteLink: ch.inviteLink });
+        if ((ch as any).type === 'BOT') {
+          const isSubbed = await prisma.botSubscriber.findFirst({
+            where: { userId: String(userId), logChannelId: ch.channelId }
+          });
+          if (!isSubbed) missing.push({ id: ch.id, channelId: ch.channelId, title: ch.title, inviteLink: ch.inviteLink, type: ch.type });
+        } else {
+          const member = await bot.telegram.getChatMember(ch.channelId, Number(userId));
+          const status = member.status;
+          if (!['member', 'administrator', 'creator'].includes(status)) {
+            missing.push({ id: ch.id, channelId: ch.channelId, title: ch.title, inviteLink: ch.inviteLink, type: ch.type });
+          }
         }
       } catch {
         // Can't check = treat as not subscribed
-        missing.push({ id: ch.id, channelId: ch.channelId, title: ch.title, inviteLink: ch.inviteLink });
+        missing.push({ id: ch.id, channelId: ch.channelId, title: ch.title, inviteLink: ch.inviteLink, type: ch.type });
       }
     }
     res.json({ ok: missing.length === 0, missing });

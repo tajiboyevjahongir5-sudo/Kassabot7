@@ -55,11 +55,21 @@ model Settings {
 
 model MandatoryChannel {
   id          Int      @id @default(autoincrement())
-  channelId   String   @unique  // Telegram channel/group ID (e.g. -100xxx) or @username
+  channelId   String   @unique  // Telegram channel/group ID (e.g. -100xxx) or @username. For bots, this is the Log Channel ID.
   title       String            // Display name
   inviteLink  String?           // Optional invite link shown to user
+  type        String   @default("CHANNEL") // "CHANNEL" or "BOT"
   order       Int      @default(0)
   createdAt   DateTime @default(now())
+}
+
+model BotSubscriber {
+  id           Int      @id @default(autoincrement())
+  userId       String
+  logChannelId String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, logChannelId])
 }
 
 model Card {

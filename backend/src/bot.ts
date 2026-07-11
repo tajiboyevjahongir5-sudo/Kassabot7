@@ -30,9 +30,18 @@ async function checkMandatorySubscription(userId: number): Promise<{ ok: boolean
     const missing: any[] = [];
     for (const ch of mandatoryChannels) {
       try {
-        const member = await bot.telegram.getChatMember(ch.channelId, userId);
-        if (!['member', 'administrator', 'creator'].includes(member.status)) {
-          missing.push(ch);
+        if ((ch as any).type === 'BOT') {
+          // It's a Bot -> Check BotSubscriber table instead of telegram API
+          const isSubbed = await prisma.botSubscriber.findFirst({
+            where: { userId: String(userId), logChannelId: ch.channelId }
+          });
+          if (!isSubbed) missing.push(ch);
+        } else {
+          // Standard Channel/Group -> Check Telegram API
+          const member = await bot.telegram.getChatMember(ch.channelId, userId);
+          if (!['member', 'administrator', 'creator'].includes(member.status)) {
+            missing.push(ch);
+          }
         }
       } catch {
         missing.push(ch);
@@ -211,13 +220,53 @@ function extractNumbers(text: string): number[] {
 
 bot.on('channel_post', async (ctx) => {
   const channelId = ctx.chat.id.toString();
-  
+  const text = (ctx.channelPost as any).text || (ctx.channelPost as any).caption || "";
+
+  // 1. Check if this is a Log Channel for a mandatory Bot
+  try {
+    const isLogChannel = await prisma.mandatoryChannel.findFirst({ where: { channelId, type: 'BOT' } });
+    if (isLogChannel) {
+      let extractedUserId: string | null = null;
+      const cp = ctx.channelPost as any;
+      
+      // Check forward
+      if (cp.forward_from && cp.forward_from.id) {
+        extractedUserId = cp.forward_from.id.toString();
+      }
+      // Check entities (text_mention)
+      else if (cp.entities) {
+        for (const ent of cp.entities) {
+          if (ent.type === 'text_mention' && ent.user) {
+            extractedUserId = ent.user.id.toString();
+            break;
+          }
+        }
+      }
+      // Check regex for ID: 1234567
+      if (!extractedUserId && text) {
+        const match = text.match(/id:?\s*(\d{5,15})/i);
+        if (match) extractedUserId = match[1];
+      }
+
+      if (extractedUserId) {
+        await prisma.botSubscriber.upsert({
+          where: { userId_logChannelId: { userId: extractedUserId, logChannelId: channelId } },
+          update: {},
+          create: { userId: extractedUserId, logChannelId: channelId }
+        });
+        console.log(`[BOT SUBSCRIBER] Saved user ${extractedUserId} for log channel ${channelId}`);
+      }
+    }
+  } catch (err) {
+    console.error("Bot log channel parsing error:", err);
+  }
+
+  // 2. Check if this is the Payment Verification channel
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   if (!settings || settings.paymentChannelId !== channelId) {
     return;
   }
 
-  const text = (ctx.channelPost as any).text || "";
   if (!text) return;
 
   const pendingPayments = await prisma.payment.findMany({ 
