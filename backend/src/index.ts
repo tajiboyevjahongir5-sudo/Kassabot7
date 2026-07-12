@@ -13,8 +13,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
-// Increase libuv thread pool for heavy I/O (DB, file ops)
-process.env.UV_THREADPOOL_SIZE = '64';
+
 
 if (cluster.isPrimary) {
   console.log(`[MASTER] PID ${process.pid} — Starting ${NUM_CPUS} workers on ${NUM_CPUS} CPUs`);
