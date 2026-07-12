@@ -599,6 +599,17 @@ function getTashkentTomorrowRange() {
   };
 }
 
+
+
+// Global error handler to catch 403 errors and avoid master process crashes
+bot.catch((err: any, ctx) => {
+  if (err.response?.error_code === 403) {
+    console.log(`User ${ctx.from?.id} bloklagan, o'tkazib yuboramiz`);
+    return;
+  }
+  console.error('Bot xatosi:', err);
+});
+
 // 2. Warn users 1 day before expiry (3 times a day at 09:00, 15:00, 19:00 Tashkent time)
 export function startExpiryWarningCron() {
   cron.schedule('0 9,15,19 * * *', async () => {
@@ -696,8 +707,10 @@ export async function notifyAdminNewPayment(payment: any, user: any, plan: any) 
           Markup.button.callback('❌ Bekor qilish', `reject_pay:${payment.id}`)
         ])
       });
-    } catch (err) {
-      console.error(`Admin notification error for ${adminId}:`, err);
+    } catch (err: any) {
+      if (err.response?.error_code !== 403 && err.response?.error_code !== 400) {
+        console.error(`Admin notification error for ${adminId}:`, err);
+      }
     }
   }
 }

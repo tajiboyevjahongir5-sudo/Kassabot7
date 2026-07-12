@@ -934,7 +934,11 @@ app.post('/api/complaint', async (req, res) => {
         `Foydalanuvchi to'lov tushmaganligidan shikoyat qilmoqda.`;
       
       for (const adminId of adminIds) {
-        await bot.telegram.sendMessage(adminId, message).catch(e => console.error(`Complaint notification error for ${adminId}:`, e));
+        await bot.telegram.sendMessage(adminId, message).catch((e: any) => {
+          if (e.response?.error_code !== 403 && e.response?.error_code !== 400) {
+            console.error(`Complaint notification error for ${adminId}:`, e);
+          }
+        });
       }
     }
     res.json({ success: true });
