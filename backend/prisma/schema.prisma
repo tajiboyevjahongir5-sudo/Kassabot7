@@ -45,6 +45,9 @@ model Subscription {
   channel     Channel  @relation(fields: [channelId], references: [id])
   status      String   @default("ACTIVE") // ACTIVE, EXPIRED
   expiresAt   DateTime
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
 }
 
 model Settings {
@@ -95,6 +98,9 @@ model Payment {
   status      String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
   createdAt   DateTime @default(now())
   promoCode   String?  // Applied promo code
+
+  @@index([status])
+  @@index([userId])
 }
 
 model PromoCode {

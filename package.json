@@ -11,6 +11,6 @@
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npx tsc",
     "build": "npm run install:all && npm run build:frontend && npm run build:backend",
-    "start": "cd backend && npx prisma db push --accept-data-loss && node --max-old-space-size=7168 --max-semi-space-size=64 dist/index.js"
+    "start": "cd backend && npx prisma db push --accept-data-loss && node dist/index.js"
   }
 }
