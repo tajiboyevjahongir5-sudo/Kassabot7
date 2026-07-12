@@ -745,3 +745,17 @@ export function startRubRateCron() {
     }
   });
 }
+
+// 5. Daily card transfer count reset (every day at 00:00 Tashkent time)
+export function startCardResetCron() {
+  cron.schedule('0 0 * * *', async () => {
+    try {
+      const result = await prisma.card.updateMany({
+        data: { transferCount: 0 }
+      });
+      console.log(`[CRON] Daily card reset: ${result.count} cards reset to 0 transfers`);
+    } catch (err) {
+      console.error('[CRON] Card reset error:', err);
+    }
+  }, { timezone: 'Asia/Tashkent' });
+}
