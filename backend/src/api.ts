@@ -6,6 +6,7 @@ import { prisma } from './prisma';
 import { bot } from './bot';
 
 import path from 'path';
+import fs from 'fs';
 
 // In-memory cache — TTL 30 seconds for stats, 5 mins for channels
 const cache = new NodeCache({ stdTTL: 30, checkperiod: 10, useClones: false });
@@ -992,6 +993,30 @@ app.post('/api/complaint', async (req, res) => {
     console.error("Complaint error:", err);
     res.status(500).json({ error: "Shikoyat yuborishda xatolik yuz berdi" });
   }
+});
+
+// Fallback for cached hashed assets (CSS/JS)
+app.use('/assets', (req, res, next) => {
+  const assetsPath = path.join(__dirname, '../../frontend/dist/assets');
+  const reqName = req.path.replace(/^\//, '');
+  
+  if (fs.existsSync(path.join(assetsPath, reqName))) {
+    return next();
+  }
+
+  const ext = reqName.endsWith('.css') ? '.css' : reqName.endsWith('.js') ? '.js' : null;
+  if (ext) {
+    try {
+      const files = fs.readdirSync(assetsPath);
+      const fallback = files.find(f => f.endsWith(ext));
+      if (fallback) {
+        return res.sendFile(path.join(assetsPath, fallback));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  next();
 });
 
 // Serve static files from frontend build
