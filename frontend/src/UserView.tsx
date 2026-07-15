@@ -28,6 +28,7 @@ function UserView() {
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const [activePayment, setActivePayment] = useState<any>(null);
   const [cardNumber, setCardNumber] = useState<string>('');
   const [cardHolder, setCardHolder] = useState<string>('');
@@ -446,7 +447,7 @@ function UserView() {
                             style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent', width: '100%', display: 'flex', userSelect: 'none' }}
                             onClick={() => {
                               if (selectedPlan === plan.id) {
-                                handlePay();
+                                setShowWarningModal(true);
                               } else {
                                 setSelectedPlan(plan.id);
                                 setSelectedChannel(channel.id);
@@ -457,7 +458,7 @@ function UserView() {
                               style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (selectedPlan === plan.id) handlePay();
+                                if (selectedPlan === plan.id) setShowWarningModal(true);
                                 else { setSelectedPlan(plan.id); setSelectedChannel(channel.id); }
                               }}
                             >
@@ -469,7 +470,7 @@ function UserView() {
                               style={{ display: 'flex', alignItems: 'center' }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (selectedPlan === plan.id) handlePay();
+                                if (selectedPlan === plan.id) setShowWarningModal(true);
                                 else { setSelectedPlan(plan.id); setSelectedChannel(channel.id); }
                               }}
                             >
@@ -483,7 +484,7 @@ function UserView() {
                             <button 
                               className="neon-btn" 
                               disabled={paying}
-                              onClick={handlePay}
+                              onClick={() => setShowWarningModal(true)}
                               style={{ marginTop: '8px', marginBottom: '4px', padding: '12px', fontSize: '14px' }}
                             >
                               {paying ? <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div> : "Obunani Faollashtirish"}
@@ -504,6 +505,40 @@ function UserView() {
       <div className="tag-bottom">
         <div className="pill-tag">@Diora_vip_bot</div>
       </div>
+      
+      {/* Warning Modal */}
+      {showWarningModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
+          <div style={{ background: '#1c1c1e', padding: '24px', borderRadius: '20px', maxWidth: '350px', width: '100%', textAlign: 'center', border: '1px solid rgba(255,59,48,0.5)', boxShadow: '0 0 40px rgba(255,59,48,0.2)' }}>
+            <div style={{ width: '64px', height: '64px', background: 'rgba(255,59,48,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '2px dashed rgba(255,59,48,0.5)' }}>
+              <AlertTriangle size={32} color="#ff3b30" />
+            </div>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '20px', color: '#ff3b30', textTransform: 'uppercase', letterSpacing: '1px' }}>Diqqat!</h3>
+            <p style={{ margin: '0 0 24px 0', fontSize: '15px', color: '#ddd', lineHeight: '1.6' }}>
+              Keyingi sahifada sizga <b>TIYIN-TIYINIGACHA ANIQ</b> summa beriladi.<br/><br/>
+              Siz <span style={{color: '#ff3b30', fontWeight: 'bold'}}>AYNAN</span> o'sha summani o'tkazishingiz shart, 1 tiyin ham farq qilmasligi kerak!<br/><br/>
+              Aks holda to'lov <b>QABUL QILINMAYDI</b> va pulingiz kuyadi!
+            </p>
+            <button 
+              className="neon-btn" 
+              style={{ width: '100%', background: '#ff3b30', color: 'white', border: 'none', boxShadow: '0 0 15px rgba(255,59,48,0.4)', fontWeight: 'bold', fontSize: '16px', padding: '14px' }}
+              onClick={() => {
+                setShowWarningModal(false);
+                handlePay();
+              }}
+              disabled={paying}
+            >
+              {paying ? <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', borderColor: '#fff', borderTopColor: 'transparent' }}></div> : "Tushundim"}
+            </button>
+            <button 
+              style={{ width: '100%', background: 'transparent', border: 'none', color: '#888', marginTop: '16px', fontSize: '14px', cursor: 'pointer', fontWeight: '500' }}
+              onClick={() => setShowWarningModal(false)}
+            >
+              Bekor qilish
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
