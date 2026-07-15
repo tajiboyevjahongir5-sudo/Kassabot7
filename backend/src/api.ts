@@ -108,6 +108,52 @@ app.post('/api/create-payment', async (req, res) => {
   if (!plan) return res.status(404).json({ error: "Plan not found" });
 
   try {
+    const adminIds = process.env.ADMIN_ID ? process.env.ADMIN_ID.split(',').map(id => id.trim()) : [];
+    const isAdmin = adminIds.includes(String(userId));
+
+    if (isAdmin) {
+      const expiresAt = new Date(Date.now() + plan.duration * 24 * 60 * 60 * 1000);
+      
+      // Update existing or create new
+      const existingSub = await prisma.subscription.findFirst({
+        where: { userId: String(userId), channelId: plan.channelId }
+      });
+
+      if (existingSub) {
+        await prisma.subscription.update({
+          where: { id: existingSub.id },
+          data: { status: 'ACTIVE', expiresAt }
+        });
+      } else {
+        await prisma.subscription.create({
+          data: {
+            userId: String(userId),
+            channelId: plan.channelId,
+            status: 'ACTIVE',
+            expiresAt
+          }
+        });
+      }
+
+      try {
+        const { bot } = await import('./bot.js');
+        const inviteLink = await bot.telegram.createChatInviteLink(plan.channelId, {
+          creates_join_request: true,
+          expire_date: Math.floor(Date.now() / 1000) + 7 * 86400,
+        });
+
+        const durationText = plan.duration === 0 ? "butun umr" : `${plan.duration} kun`;
+
+        await bot.telegram.sendMessage(
+          String(userId),
+          `👑 Admin sifatida sizga tekin obuna faollashtirildi!\n\nObunangiz ${durationText} amal qiladi.\n\nKanalga kirish havolasi:\n${inviteLink.invite_link}`
+        );
+      } catch (err) {
+        console.error('Admin invite link error:', err);
+      }
+
+      return res.json({ adminBypass: true });
+    }
     // Check if user already has a pending payment for this plan to avoid creating duplicates needlessly
     const existing = await prisma.payment.findFirst({
       where: { userId: String(userId), planId, status: 'PENDING' }
