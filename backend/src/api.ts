@@ -109,8 +109,9 @@ app.post('/api/create-payment', async (req, res) => {
   if (!plan) return res.status(404).json({ error: "Plan not found" });
 
   try {
-    const adminIds = process.env.ADMIN_ID ? process.env.ADMIN_ID.split(',').map(id => id.trim()) : [];
-    const isAdmin = adminIds.includes(String(userId));
+    const adminEnvRaw = process.env.ADMIN_ID?.trim();
+    const adminIds = adminEnvRaw ? adminEnvRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
+    const isAdmin = adminIds.length > 0 && adminIds.includes(String(userId));
 
     if (isAdmin) {
       const expiresAt = new Date(Date.now() + plan.duration * 24 * 60 * 60 * 1000);
