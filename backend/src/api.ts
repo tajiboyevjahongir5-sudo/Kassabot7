@@ -285,13 +285,15 @@ app.post('/api/admin/channels', requireAdmin, async (req, res) => {
   const { id, title, adminId, image } = req.body;
   if (!id || !title) return res.status(400).json({ error: 'Kanal ID va nomi majburiy' });
   try {
-    const channel = await prisma.channel.create({
-      data: { id: id.toString(), title, image: image || null, adminId: adminId || "12345" }
+    // Upsert: if channel was soft-deleted before, restore it
+    const channel = await prisma.channel.upsert({
+      where: { id: id.toString() },
+      update: { title, image: image || null, isDeleted: false },
+      create: { id: id.toString(), title, image: image || null, adminId: adminId || "12345" }
     });
     res.json(channel);
   } catch (err: any) {
     console.error('Add channel error:', err);
-    if (err?.code === 'P2002') return res.status(400).json({ error: 'Bu kanal ID allaqachon mavjud' });
     res.status(500).json({ error: 'Failed to add channel', detail: err?.message });
   }
 });
