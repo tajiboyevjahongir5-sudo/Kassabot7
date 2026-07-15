@@ -27,25 +27,22 @@ app.get('/health', (req, res) => {
 // Serve static files from frontend build is handled at the bottom of the file
 
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Check local development bypass or real telegram auth
-  const isLocalHost = req.hostname === 'localhost';
-  if (isLocalHost && process.env.NODE_ENV !== 'production') {
-    return next(); // Bypass for local dev testing if needed
-  }
-
   const initData = req.headers['x-telegram-init-data'] as string;
   const botToken = process.env.BOT_TOKEN;
-  const adminIdEnv = process.env.ADMIN_ID; // Comma-separated admin IDs
+  const adminIdEnv = process.env.ADMIN_ID;
+
+  if (!adminIdEnv || !adminIdEnv.trim()) {
+    return res.status(403).json({ error: 'Forbidden: ADMIN_ID not configured on server' });
+  }
 
   if (!initData || !botToken) {
     return res.status(401).json({ error: 'Unauthorized: Missing initData or token' });
   }
 
   const user = validateWebAppData(initData, botToken);
-  
-  // Parse comma-separated admin IDs and check
-  const adminIds = adminIdEnv ? adminIdEnv.split(',').map(id => id.trim()) : [];
-  if (!user || (adminIds.length > 0 && !adminIds.includes(user.id?.toString()))) {
+  const adminIds = adminIdEnv.split(',').map(id => id.trim()).filter(Boolean);
+
+  if (!user || !adminIds.includes(user.id?.toString())) {
     return res.status(403).json({ error: 'Forbidden: You are not the admin' });
   }
 
@@ -286,13 +283,16 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
 // Add a new channel
 app.post('/api/admin/channels', requireAdmin, async (req, res) => {
   const { id, title, adminId, image } = req.body;
+  if (!id || !title) return res.status(400).json({ error: 'Kanal ID va nomi majburiy' });
   try {
     const channel = await prisma.channel.create({
-      data: { id, title, image, adminId: adminId || "12345" }
+      data: { id: id.toString(), title, image: image || null, adminId: adminId || "12345" }
     });
     res.json(channel);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to add channel' });
+  } catch (err: any) {
+    console.error('Add channel error:', err);
+    if (err?.code === 'P2002') return res.status(400).json({ error: 'Bu kanal ID allaqachon mavjud' });
+    res.status(500).json({ error: 'Failed to add channel', detail: err?.message });
   }
 });
 
