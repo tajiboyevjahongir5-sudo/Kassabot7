@@ -129,6 +129,12 @@ function UserView() {
       
       const data = await res.json();
       
+      if (data.adminBypass) {
+        alert("Siz adminsiz! Obuna tekinga faollashtirildi.");
+        window.location.reload();
+        return;
+      }
+
       if (data.payment) {
         setActivePayment(data.payment);
       } else {
