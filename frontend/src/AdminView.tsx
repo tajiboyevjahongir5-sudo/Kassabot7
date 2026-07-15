@@ -151,11 +151,11 @@ export default function AdminView() {
         setNewChannelImage(null);
         fetchData();
       } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to add channel');
+        const data = await res.json().catch(() => ({}));
+        alert(`Xato (${res.status}): ${data.error || data.detail || 'Failed to add channel'}`);
       }
     } catch (err) {
-      alert('Error adding channel');
+      alert('Tarmoq xatoligi: ' + String(err));
     }
   };
 
