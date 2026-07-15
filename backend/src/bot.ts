@@ -356,19 +356,14 @@ bot.on('channel_post', async (ctx) => {
       const expectedAmount = match.expectedAmount;
       const usernameVal = payment.user?.username ? payment.user.username : 'yo\'q';
 
-      // Notify all admins
+      // Faqat adminga xabar ber — foydalanuvchiga yuborma (noto'g'ri odam bezovta bo'ladi)
       for (const aid of adminIds) {
         await bot.telegram.sendMessage(
           aid,
-          `⚠️ Noto'g'ri summa keldi! Kimdir ${foundAmount} to'ladi, lekin kutilgan summa ${expectedAmount} edi. To'lov ID: #${payment.id}. Foydalanuvchi: @${usernameVal}`
+          `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${foundAmount} so'm\nKutilgan summa: ${expectedAmount} so'm\nFarq: ${Math.abs(expectedAmount - foundAmount)} so'm\nTo'lov ID: #${payment.id}\nFoydalanuvchi: @${usernameVal}\n\nQo'lda tasdiqlash uchun admin panelni oching.`
         ).catch(e => console.error("Admin notification error:", e));
       }
-
-      // Notify user
-      await bot.telegram.sendMessage(
-        payment.userId,
-        `❌ To'lovingiz ${foundAmount} so'm bo'lib keldi, lekin biz ${expectedAmount} so'm kutgandik. Iltimos, adminga murojaat qiling yoki qaytadan urinib ko'ring.`
-      ).catch(e => console.error("User warning notification error:", e));
+      // Foydalanuvchiga xabar YUBORMANG — bu boshqa odamning to'lovi bo'lishi mumkin
     }
   }
 });
