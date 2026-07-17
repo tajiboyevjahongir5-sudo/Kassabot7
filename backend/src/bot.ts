@@ -638,18 +638,18 @@ export function startExpiryWarningCron() {
   });
 }
 
-// 3. Auto-cancel payments older than 30 minutes (every 2 minutes)
+// 3. Auto-cancel payments older than 3 minutes (every 30 seconds)
 export function startPaymentTimeoutCron() {
-  // One-time cleanup on startup: cancel all very old pending payments (older than 1 day)
+  // One-time cleanup on startup: cancel all stale pending payments older than 3 min
   (async () => {
     try {
-      const staleDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const staleDate = new Date(Date.now() - 3 * 60 * 1000);
       const result = await prisma.payment.updateMany({
         where: { status: 'PENDING', createdAt: { lt: staleDate } },
         data: { status: 'CANCELLED' }
       });
       if (result.count > 0) {
-        console.log(`[STARTUP] Cleaned up ${result.count} stale pending payments (older than 1 day).`);
+        console.log(`[STARTUP] Cleaned up ${result.count} stale pending payments.`);
       }
     } catch (err) {
       console.error('[STARTUP] Stale payment cleanup error:', err);
@@ -658,30 +658,20 @@ export function startPaymentTimeoutCron() {
 
   setInterval(async () => {
     try {
-      const timeoutDate = new Date(Date.now() - 30 * 60 * 1000); // 30 daqiqa
+      const timeoutDate = new Date(Date.now() - 3 * 60 * 1000); // 3 daqiqa
 
-      const expiredPayments = await prisma.payment.findMany({
-        where: {
-          status: 'PENDING',
-          createdAt: { lt: timeoutDate }
-        }
+      const count = await prisma.payment.updateMany({
+        where: { status: 'PENDING', createdAt: { lt: timeoutDate } },
+        data: { status: 'CANCELLED' }
       });
 
-      if (expiredPayments.length > 0) {
-        await prisma.payment.updateMany({
-          where: {
-            status: 'PENDING',
-            createdAt: { lt: timeoutDate }
-          },
-          data: { status: 'CANCELLED' }
-        });
-
-        console.log(`Auto-cancelled ${expiredPayments.length} expired payments (older than 30m).`);
+      if (count.count > 0) {
+        console.log(`Auto-cancelled ${count.count} expired payments (older than 3min).`);
       }
     } catch (err) {
       console.error('Error in payment timeout cron:', err);
     }
-  }, 2 * 60 * 1000); // Check every 2 minutes
+  }, 30 * 1000); // Check every 30 seconds
 }
 
 // ============ ADMIN NOTIFICATION HELPER ============
