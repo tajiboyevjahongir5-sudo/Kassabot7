@@ -746,32 +746,9 @@ export function startPaymentTimeoutCron() {
 // ============ ADMIN NOTIFICATION HELPER ============
 
 export async function notifyAdminNewPayment(payment: any, user: any, plan: any) {
-  const adminIds = getAdminIds();
-  if (adminIds.length === 0) return;
-
-  const text = 
-    `💰 **Yangi to'lov!**\n\n` +
-    `👤 Ism: ${user.firstName || 'Ismsiz'}\n` +
-    `📛 Username: ${user.username ? '@' + user.username : 'yo\'q'}\n` +
-    `💵 Summa: ${payment.amount.toLocaleString()} UZS\n` +
-    `📦 Tarif: ${plan.name}\n` +
-    `🆔 To'lov ID: #${payment.id}`;
-
-  for (const adminId of adminIds) {
-    try {
-      await bot.telegram.sendMessage(adminId, text, {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          Markup.button.callback('✅ Tasdiqlash', `confirm_pay:${payment.id}`),
-          Markup.button.callback('❌ Bekor qilish', `reject_pay:${payment.id}`)
-        ])
-      });
-    } catch (err: any) {
-      if (err.response?.error_code !== 403 && err.response?.error_code !== 400) {
-        console.error(`Admin notification error for ${adminId}:`, err);
-      }
-    }
-  }
+  // Foydalanuvchi xohishiga ko'ra o'chirib qo'yildi - to'lovlar faqat Admin panelda
+  // ko'rinadi, Telegram chatga "Yangi to'lov!" xabarlari kelmaydi.
+  return;
 }
 
 // 4. Auto-update Ruble exchange rate (every 25 minutes)
