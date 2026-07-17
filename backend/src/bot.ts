@@ -276,14 +276,12 @@ bot.on('channel_post', async (ctx) => {
 
   const extractedNumbers = extractNumbers(text);
   const exactMatches: any[] = [];
-  const closeMatches: any[] = [];
 
+  // Only find exact matches for auto-confirmation
   for (const num of extractedNumbers) {
     for (const payment of pendingPayments) {
       if (payment.amount === num) {
         exactMatches.push(payment);
-      } else if (Math.abs(payment.amount - num) <= 500) {
-        closeMatches.push({ payment, foundAmount: num, expectedAmount: payment.amount });
       }
     }
   }
@@ -342,28 +340,29 @@ bot.on('channel_post', async (ctx) => {
         } catch (e) {}
       }
     }
-  } else if (closeMatches.length > 0) {
-    // Process close matches
-    const uniqueCloseMatches = closeMatches.filter((m, index, self) => 
-      self.findIndex(t => t.payment.id === m.payment.id) === index
-    );
+  } else {
+    // No exact match — find the single CLOSEST pending payment (not all within ±500)
+    let bestMatch: { payment: any; foundAmount: number; diff: number } | null = null;
 
-    const adminIds = getAdminIds();
+    for (const num of extractedNumbers) {
+      for (const payment of pendingPayments) {
+        const diff = Math.abs(payment.amount - num);
+        if (diff <= 500 && (!bestMatch || diff < bestMatch.diff)) {
+          bestMatch = { payment, foundAmount: num, diff };
+        }
+      }
+    }
 
-    for (const match of uniqueCloseMatches) {
-      const payment = match.payment;
-      const foundAmount = match.foundAmount;
-      const expectedAmount = match.expectedAmount;
-      const usernameVal = payment.user?.username ? payment.user.username : 'yo\'q';
-
-      // Faqat adminga xabar ber — foydalanuvchiga yuborma (noto'g'ri odam bezovta bo'ladi)
+    // Send ONE notification to admin only (not one per payment!)
+    if (bestMatch) {
+      const adminIds = getAdminIds();
+      const usernameVal = bestMatch.payment.user?.username ? bestMatch.payment.user.username : 'yo\'q';
       for (const aid of adminIds) {
         await bot.telegram.sendMessage(
           aid,
-          `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${foundAmount} so'm\nKutilgan summa: ${expectedAmount} so'm\nFarq: ${Math.abs(expectedAmount - foundAmount)} so'm\nTo'lov ID: #${payment.id}\nFoydalanuvchi: @${usernameVal}\n\nQo'lda tasdiqlash uchun admin panelni oching.`
+          `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${bestMatch.foundAmount} so'm\nEng yaqin kutilgan: ${bestMatch.payment.amount} so'm\nFarq: ${bestMatch.diff} so'm\nTo'lov ID: #${bestMatch.payment.id}\nFoydalanuvchi: @${usernameVal}\n\nAdmin paneldan qo'lda tasdiqlang.`
         ).catch(e => console.error("Admin notification error:", e));
       }
-      // Foydalanuvchiga xabar YUBORMANG — bu boshqa odamning to'lovi bo'lishi mumkin
     }
   }
 });
