@@ -347,7 +347,7 @@ bot.on('channel_post', async (ctx) => {
     for (const num of extractedNumbers) {
       for (const payment of pendingPayments) {
         const diff = Math.abs(payment.amount - num);
-        if (diff <= 500 && (!bestMatch || diff < bestMatch.diff)) {
+        if (diff <= 50 && (!bestMatch || diff < bestMatch.diff)) {
           bestMatch = { payment, foundAmount: num, diff };
         }
       }
