@@ -341,41 +341,42 @@ bot.on('channel_post', async (ctx) => {
       }
     }
   } else {
-    // No exact match — find all pending payments within ±500 tolerance
-    const closeMatches: { payment: any; foundAmount: number; diff: number }[] = [];
+    // No exact match. Identify the likely payment amount from the bank SMS (the number closest to any pending payment)
+    let bestMatch: { payment: any; foundAmount: number; diff: number } | null = null;
 
     for (const num of extractedNumbers) {
       for (const payment of pendingPayments) {
         const diff = Math.abs(payment.amount - num);
-        if (diff <= 500) {
-          if (!closeMatches.some(m => m.payment.id === payment.id)) {
-            closeMatches.push({ payment, foundAmount: num, diff });
-          }
+        // We look for a number that is somewhat close to avoid picking bank balances (e.g. diff <= 50000)
+        if (diff <= 50000 && (!bestMatch || diff < bestMatch.diff)) {
+          bestMatch = { payment, foundAmount: num, diff };
         }
       }
     }
 
-    if (closeMatches.length > 0) {
+    if (bestMatch) {
       const adminIds = getAdminIds();
-      
-      // Notify admin about the closest one so they are aware
-      const bestMatch = closeMatches.reduce((prev, current) => (prev.diff < current.diff) ? prev : current);
-      const usernameVal = bestMatch.payment.user?.username ? bestMatch.payment.user.username : 'yo\'q';
-      for (const aid of adminIds) {
-        await bot.telegram.sendMessage(
-          aid,
-          `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${bestMatch.foundAmount} so'm\nEng yaqin kutilgan: ${bestMatch.payment.amount} so'm\nFarq: ${bestMatch.diff} so'm\n\nMijozlarga chek so'rab xabar yuborildi.`
-        ).catch(e => console.error("Admin notification error:", e));
-      }
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const recentPendingPayments = pendingPayments.filter(p => new Date(p.createdAt) >= fiveMinutesAgo);
 
-      // Notify all close-match users to send a receipt
-      for (const match of closeMatches) {
-        try {
+      if (recentPendingPayments.length > 0) {
+        // Notify admin
+        for (const aid of adminIds) {
           await bot.telegram.sendMessage(
-            match.payment.userId,
-            `⚠️ Bizga ${match.foundAmount} so'm kelib tushdi, lekin sizning to'lovingiz ${match.payment.amount} so'm bo'lishi kerak edi.\n\nAgar bu to'lovni siz amalga oshirgan bo'lsangiz, iltimos to'lov chekini (skrinshotini) shu yerga yuboring.`
-          );
-        } catch (e) {}
+            aid,
+            `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${bestMatch.foundAmount} so'm\n\nOxirgi 5 daqiqa ichida to'lov qilmoqchi bo'lgan ${recentPendingPayments.length} ta mijozga chek so'rab xabar yuborildi.`
+          ).catch(e => console.error("Admin notification error:", e));
+        }
+
+        // Notify all recent pending users
+        for (const payment of recentPendingPayments) {
+          try {
+            await bot.telegram.sendMessage(
+              payment.userId,
+              `⚠️ Bizga ${bestMatch.foundAmount} so'm kelib tushdi, lekin sizning to'lovingiz ${payment.amount} so'm bo'lishi kerak edi.\n\nAgar bu to'lovni siz amalga oshirgan bo'lsangiz, iltimos to'lov chekini (skrinshotini) shu yerga yuboring.`
+            );
+          } catch (e) {}
+        }
       }
     }
   }
