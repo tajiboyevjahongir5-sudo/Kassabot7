@@ -638,11 +638,27 @@ export function startExpiryWarningCron() {
   });
 }
 
-// 3. Auto-cancel payments older than 1.5 minutes (every 10 seconds)
+// 3. Auto-cancel payments older than 30 minutes (every 2 minutes)
 export function startPaymentTimeoutCron() {
+  // One-time cleanup on startup: cancel all very old pending payments (older than 1 day)
+  (async () => {
+    try {
+      const staleDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const result = await prisma.payment.updateMany({
+        where: { status: 'PENDING', createdAt: { lt: staleDate } },
+        data: { status: 'CANCELLED' }
+      });
+      if (result.count > 0) {
+        console.log(`[STARTUP] Cleaned up ${result.count} stale pending payments (older than 1 day).`);
+      }
+    } catch (err) {
+      console.error('[STARTUP] Stale payment cleanup error:', err);
+    }
+  })();
+
   setInterval(async () => {
     try {
-      const timeoutDate = new Date(Date.now() - 3 * 60 * 1000);
+      const timeoutDate = new Date(Date.now() - 30 * 60 * 1000); // 30 daqiqa
 
       const expiredPayments = await prisma.payment.findMany({
         where: {
@@ -660,22 +676,12 @@ export function startPaymentTimeoutCron() {
           data: { status: 'CANCELLED' }
         });
 
-        // Notify users
-        for (const pay of expiredPayments) {
-          try {
-            await bot.telegram.sendMessage(
-              pay.userId,
-              `⏰ To'lov muddati tugadi (3 daqiqa). To'lov bekor qilindi.\n\nQaytadan urinish uchun /start buyrug'ini yuboring.`
-            );
-          } catch (err) {} // user blocked bot
-        }
-
-        console.log(`Auto-cancelled ${expiredPayments.length} expired payments (older than 1.5m).`);
+        console.log(`Auto-cancelled ${expiredPayments.length} expired payments (older than 30m).`);
       }
     } catch (err) {
       console.error('Error in payment timeout cron:', err);
     }
-  }, 10 * 1000); // Check every 10 seconds
+  }, 2 * 60 * 1000); // Check every 2 minutes
 }
 
 // ============ ADMIN NOTIFICATION HELPER ============
