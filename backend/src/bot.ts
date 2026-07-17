@@ -341,27 +341,41 @@ bot.on('channel_post', async (ctx) => {
       }
     }
   } else {
-    // No exact match — find the single CLOSEST pending payment (not all within ±500)
-    let bestMatch: { payment: any; foundAmount: number; diff: number } | null = null;
+    // No exact match — find all pending payments within ±500 tolerance
+    const closeMatches: { payment: any; foundAmount: number; diff: number }[] = [];
 
     for (const num of extractedNumbers) {
       for (const payment of pendingPayments) {
         const diff = Math.abs(payment.amount - num);
-        if (diff <= 500 && (!bestMatch || diff < bestMatch.diff)) {
-          bestMatch = { payment, foundAmount: num, diff };
+        if (diff <= 500) {
+          if (!closeMatches.some(m => m.payment.id === payment.id)) {
+            closeMatches.push({ payment, foundAmount: num, diff });
+          }
         }
       }
     }
 
-    // Send ONE notification to admin only (not one per payment!)
-    if (bestMatch) {
+    if (closeMatches.length > 0) {
       const adminIds = getAdminIds();
+      
+      // Notify admin about the closest one so they are aware
+      const bestMatch = closeMatches.reduce((prev, current) => (prev.diff < current.diff) ? prev : current);
       const usernameVal = bestMatch.payment.user?.username ? bestMatch.payment.user.username : 'yo\'q';
       for (const aid of adminIds) {
         await bot.telegram.sendMessage(
           aid,
-          `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${bestMatch.foundAmount} so'm\nEng yaqin kutilgan: ${bestMatch.payment.amount} so'm\nFarq: ${bestMatch.diff} so'm\nTo'lov ID: #${bestMatch.payment.id}\nFoydalanuvchi: @${usernameVal}\n\nAdmin paneldan qo'lda tasdiqlang.`
+          `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${bestMatch.foundAmount} so'm\nEng yaqin kutilgan: ${bestMatch.payment.amount} so'm\nFarq: ${bestMatch.diff} so'm\n\nMijozlarga chek so'rab xabar yuborildi.`
         ).catch(e => console.error("Admin notification error:", e));
+      }
+
+      // Notify all close-match users to send a receipt
+      for (const match of closeMatches) {
+        try {
+          await bot.telegram.sendMessage(
+            match.payment.userId,
+            `⚠️ Bizga ${match.foundAmount} so'm kelib tushdi, lekin sizning to'lovingiz ${match.payment.amount} so'm bo'lishi kerak edi.\n\nAgar bu to'lovni siz amalga oshirgan bo'lsangiz, iltimos to'lov chekini (skrinshotini) shu yerga yuboring.`
+          );
+        } catch (e) {}
       }
     }
   }
@@ -467,11 +481,65 @@ bot.on('callback_query', async (ctx) => {
         (ctx.callbackQuery as any).message.text + '\n\n❌ BEKOR QILINDI',
         { reply_markup: undefined }
       );
-      await ctx.answerCbQuery('❌ Bekor qilindi');
+      await bot.telegram.sendMessage(payment.userId, `❌ To'lovingiz rad etildi.`);
     } catch (err) {
-      console.error('Reject error:', err);
-      await ctx.answerCbQuery('❌ Xatolik yuz berdi');
+      console.error("Reject payment error:", err);
     }
+  }
+});
+
+// ============ PHOTO / RECEIPT HANDLER ============
+
+bot.on('photo', async (ctx) => {
+  const userId = ctx.from.id.toString();
+
+  // Find if user has a pending payment
+  const pendingPayment = await prisma.payment.findFirst({
+    where: { userId, status: 'PENDING' },
+    orderBy: { createdAt: 'desc' },
+    include: { user: true, plan: true }
+  });
+
+  if (!pendingPayment) {
+    return ctx.reply("Sizda kutilayotgan to'lov yo'q yoki to'lov vaqti o'tib ketgan.");
+  }
+
+  const adminIds = getAdminIds();
+  if (adminIds.length === 0) {
+    return ctx.reply("Adminga bog'lanib bo'lmadi.");
+  }
+
+  const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+  const usernameVal = pendingPayment.user?.username ? pendingPayment.user.username : 'yo\'q';
+  
+  const text = `🧾 **Foydalanuvchi chek yubordi!**\n\n` +
+    `Foydalanuvchi: @${usernameVal}\n` +
+    `Kutilgan summa: ${pendingPayment.amount} so'm\n` +
+    `Tarif: ${pendingPayment.plan.name}\n` +
+    `To'lov ID: #${pendingPayment.id}\n\n` +
+    `Iltimos, chekni tekshirib tasdiqlang yoki rad qiling.`;
+
+  let sent = false;
+  for (const aid of adminIds) {
+    try {
+      await bot.telegram.sendPhoto(aid, photo, {
+        caption: text,
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          Markup.button.callback('✅ Tasdiqlash', `confirm_pay:${pendingPayment.id}`),
+          Markup.button.callback('❌ Rad qilish', `reject_pay:${pendingPayment.id}`)
+        ])
+      });
+      sent = true;
+    } catch (e) {
+      console.error(`Failed to send receipt to admin ${aid}:`, e);
+    }
+  }
+
+  if (sent) {
+    await ctx.reply("✅ Chek adminga yuborildi! Iltimos, tasdiqlashlarini kuting.");
+  } else {
+    await ctx.reply("❌ Xatolik: Chekni adminga yuborishning imkoni bo'lmadi.");
   }
 });
 
