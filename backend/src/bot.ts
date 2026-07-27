@@ -707,7 +707,7 @@ export function startExpiryWarningCron() {
   });
 }
 
-// 3. Auto-cancel payments older than 3 minutes (every 30 seconds)
+// 3. Auto-cancel payments older than 3 minutes (every 60 seconds)
 export function startPaymentTimeoutCron() {
   // One-time cleanup on startup: cancel all stale pending payments older than 3 min
   (async () => {
@@ -740,7 +740,30 @@ export function startPaymentTimeoutCron() {
     } catch (err) {
       console.error('Error in payment timeout cron:', err);
     }
-  }, 30 * 1000); // Check every 30 seconds
+  }, 60 * 1000); // Check every 60 seconds
+}
+
+// 6. Auto database cleanup: purge CANCELLED payments older than 24 hours to keep DB lightweight
+export function startDatabaseCleanupCron() {
+  const cleanup = async () => {
+    try {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const deleted = await prisma.payment.deleteMany({
+        where: {
+          status: 'CANCELLED',
+          createdAt: { lt: oneDayAgo }
+        }
+      });
+      if (deleted.count > 0) {
+        console.log(`[CLEANUP] Purged ${deleted.count} cancelled payments older than 24h.`);
+      }
+    } catch (err) {
+      console.error('[CLEANUP] Database cleanup error:', err);
+    }
+  };
+
+  cleanup();
+  setInterval(cleanup, 6 * 60 * 60 * 1000); // Every 6 hours
 }
 
 // ============ ADMIN NOTIFICATION HELPER ============

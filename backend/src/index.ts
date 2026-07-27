@@ -1,5 +1,5 @@
 import { prisma } from './prisma.js';
-import { bot, startSubscriptionCron, startExpiryWarningCron, startPaymentTimeoutCron, startRubRateCron, startCardResetCron } from './bot.js';
+import { bot, startSubscriptionCron, startExpiryWarningCron, startPaymentTimeoutCron, startRubRateCron, startCardResetCron, startDatabaseCleanupCron } from './bot.js';
 import { app } from './api.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -50,6 +50,7 @@ async function main() {
   startPaymentTimeoutCron();
   startRubRateCron();
   startCardResetCron();
+  startDatabaseCleanupCron();
   console.log('[SERVER] All cron jobs started.');
 }
 
