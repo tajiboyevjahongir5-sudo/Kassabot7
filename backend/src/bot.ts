@@ -452,10 +452,20 @@ bot.on('callback_query', async (ctx) => {
         ).catch(() => {});
       }
 
-      await ctx.editMessageText(
-        (ctx.callbackQuery as any).message.text + '\n\n✅ TASDIQLANDI',
-        { reply_markup: undefined }
-      );
+      const cbMsg = (ctx.callbackQuery as any)?.message;
+      const isPhoto = cbMsg?.caption !== undefined;
+      const textVal = isPhoto ? cbMsg.caption : (cbMsg?.text || '');
+
+      try {
+        if (isPhoto) {
+          await ctx.editMessageCaption(textVal + '\n\n✅ TASDIQLANDI', { reply_markup: undefined });
+        } else {
+          await ctx.editMessageText(textVal + '\n\n✅ TASDIQLANDI', { reply_markup: undefined });
+        }
+      } catch (e) {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      }
+
       await ctx.answerCbQuery('✅ Tasdiqlandi!');
     } catch (err) {
       console.error('Confirm error:', err);
@@ -478,13 +488,24 @@ bot.on('callback_query', async (ctx) => {
         `❌ To'lovingiz (${payment.amount} so'm) qabul qilinmadi. Ma'lumotlarni tekshiring.`
       ).catch(() => {});
 
-      await ctx.editMessageText(
-        (ctx.callbackQuery as any).message.text + '\n\n❌ BEKOR QILINDI',
-        { reply_markup: undefined }
-      );
-      await bot.telegram.sendMessage(payment.userId, `❌ To'lovingiz rad etildi.`);
+      const cbMsg = (ctx.callbackQuery as any)?.message;
+      const isPhoto = cbMsg?.caption !== undefined;
+      const textVal = isPhoto ? cbMsg.caption : (cbMsg?.text || '');
+
+      try {
+        if (isPhoto) {
+          await ctx.editMessageCaption(textVal + '\n\n❌ BEKOR QILINDI', { reply_markup: undefined });
+        } else {
+          await ctx.editMessageText(textVal + '\n\n❌ BEKOR QILINDI', { reply_markup: undefined });
+        }
+      } catch (e) {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      }
+
+      await ctx.answerCbQuery('❌ Bekor qilindi');
     } catch (err) {
       console.error("Reject payment error:", err);
+      await ctx.answerCbQuery('❌ Xatolik yuz berdi');
     }
   }
 });
