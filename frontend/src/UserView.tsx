@@ -200,71 +200,118 @@ function UserView() {
               </div>
             </div>
             
-            <div style={{ 
-              background: 'linear-gradient(135deg, #23253a 0%, #151623 100%)', 
-              border: '1px solid rgba(255,255,255,0.05)', 
-              padding: '24px', 
-              borderRadius: '16px', 
-              marginBottom: '20px',
-              position: 'relative',
-              boxShadow: '0 10px 30px -10px rgba(0,0,0,0.5)',
-              overflow: 'hidden'
-            }}>
-              {/* Decorative elements */}
-              <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', background: 'var(--accent-cyan)', filter: 'blur(50px)', opacity: 0.15 }}></div>
-              <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', width: '100px', height: '100px', background: 'var(--accent-purple)', filter: 'blur(50px)', opacity: 0.15 }}></div>
+            <div 
+              onClick={handleCopy}
+              style={{ 
+                background: 'linear-gradient(135deg, #191b2d 0%, #251636 50%, #111325 100%)', 
+                border: '1px solid rgba(255, 255, 255, 0.12)', 
+                padding: '20px 22px', 
+                borderRadius: '18px', 
+                marginBottom: '20px',
+                position: 'relative',
+                boxShadow: '0 15px 35px -10px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+              }}
+            >
+              {/* Card Ambient Glow Highlights */}
+              <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '130px', height: '130px', background: 'var(--accent-cyan)', filter: 'blur(55px)', opacity: 0.2, pointerEvents: 'none' }}></div>
+              <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '130px', height: '130px', background: 'var(--accent-purple)', filter: 'blur(55px)', opacity: 0.25, pointerEvents: 'none' }}></div>
+              
+              {/* Subtle Card Background Pattern */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                background: 'radial-gradient(circle at 80% 20%, rgba(255,255,255,0.03) 0%, transparent 60%)',
+                pointerEvents: 'none'
+              }}></div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px' }}>O'tkazma uchun karta</div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <div 
-                    onClick={handleCopy}
-                    style={{ 
-                      background: copied ? 'rgba(0, 255, 102, 0.15)' : 'rgba(255,255,255,0.1)', 
-                      border: copied ? '1px solid rgba(0, 255, 102, 0.3)' : '1px solid rgba(255,255,255,0.2)',
-                      padding: '4px 10px', 
-                      borderRadius: '8px', 
-                      cursor: 'pointer', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '6px', 
-                      fontSize: '12px', 
-                      color: copied ? '#00ff66' : '#fff', 
-                      transition: 'all 0.2s',
-                      fontWeight: '500'
-                    }}
-                  >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                    {copied ? 'Nusxa olindi' : 'Nusxalash'}
-                  </div>
-                  <div style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
-                  </div>
+              {/* Card Header: Label & Copy Button */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', position: 'relative', zIndex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+                  O'tkazma uchun karta
+                </div>
+
+                <div 
+                  style={{ 
+                    background: copied ? 'rgba(0, 255, 102, 0.2)' : 'rgba(255,255,255,0.08)', 
+                    border: copied ? '1px solid rgba(0, 255, 102, 0.4)' : '1px solid rgba(255,255,255,0.15)',
+                    padding: '5px 12px', 
+                    borderRadius: '20px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    fontSize: '12px', 
+                    color: copied ? '#00ff66' : '#fff', 
+                    transition: 'all 0.2s ease',
+                    fontWeight: '600',
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: copied ? '0 0 12px rgba(0,255,102,0.3)' : 'none'
+                  }}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                  {copied ? 'Nusxa olindi!' : 'Nusxalash'}
                 </div>
               </div>
 
+              {/* Metallic Chip & Contactless Icon */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', position: 'relative', zIndex: 1 }}>
+                {/* Metallic Gold Chip SVG */}
+                <div style={{ 
+                  width: '38px', 
+                  height: '28px', 
+                  borderRadius: '6px', 
+                  background: 'linear-gradient(135deg, #e6c875 0%, #b8860b 50%, #ffd700 100%)',
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.6), 0 2px 4px rgba(0,0,0,0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ position: 'absolute', top: '35%', left: 0, right: 0, height: '1px', background: 'rgba(0,0,0,0.3)' }}></div>
+                  <div style={{ position: 'absolute', top: '65%', left: 0, right: 0, height: '1px', background: 'rgba(0,0,0,0.3)' }}></div>
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, left: '45%', width: '1px', background: 'rgba(0,0,0,0.3)' }}></div>
+                </div>
+
+                {/* Contactless Waves Icon */}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round">
+                  <path d="M8.5 14.5A5 5 0 0 1 8.5 9.5" />
+                  <path d="M12 17A9 9 0 0 0 12 7" />
+                  <path d="M15.5 19.5A13 13 0 0 0 15.5 4.5" />
+                </svg>
+              </div>
+
+              {/* Card Number Line (Nowrap, Responsive Font Size) */}
               <div style={{ 
-                fontSize: '22px', 
-                fontWeight: 'bold', 
-                letterSpacing: '3px', 
+                fontSize: 'clamp(15px, 4.8vw, 21px)', 
+                fontWeight: '700', 
+                letterSpacing: '1.5px', 
                 userSelect: 'all', 
-                color: '#fff',
-                fontFamily: 'monospace',
+                color: '#ffffff',
+                fontFamily: "'Courier New', Courier, monospace, sans-serif",
                 textAlign: 'left',
-                textShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                textShadow: '0 2px 8px rgba(0,0,0,0.7)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
                 position: 'relative',
-                zIndex: 1
+                zIndex: 1,
+                marginBottom: cardHolder ? '12px' : '4px'
               }}>
                 {cardNumber ? cardNumber.replace(/(\d{4})/g, '$1 ').trim() : "Admin karta kiritmagan!"}
               </div>
 
+              {/* Card Holder Name */}
               {cardHolder && (
                 <div style={{ 
-                  fontSize: '13px', 
-                  color: 'rgba(255,255,255,0.7)', 
-                  marginTop: '15px', 
+                  fontSize: '12px', 
+                  fontWeight: '600',
+                  color: 'rgba(255,255,255,0.75)', 
                   textTransform: 'uppercase', 
-                  letterSpacing: '2px',
+                  letterSpacing: '1.5px',
                   textAlign: 'left',
                   display: 'flex',
                   alignItems: 'center',
@@ -272,8 +319,8 @@ function UserView() {
                   position: 'relative',
                   zIndex: 1
                 }}>
-                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                   </div>
                   {cardHolder}
                 </div>
