@@ -35,7 +35,10 @@ export default function AdminView() {
 
   // Broadcast
   const [broadcastText, setBroadcastText] = useState('');
-  const [broadcastImageBase64, setBroadcastImageBase64] = useState<string | null>(null);
+  const [broadcastMediaBase64, setBroadcastMediaBase64] = useState<string | null>(null);
+  const [broadcastMediaType, setBroadcastMediaType] = useState<'image' | 'video' | null>(null);
+  const [broadcastButtonText, setBroadcastButtonText] = useState<string>('');
+  const [broadcastButtonUrl, setBroadcastButtonUrl] = useState<string>('');
   const [broadcasting, setBroadcasting] = useState(false);
 
   // Users, Payments, Revenue
@@ -253,9 +256,29 @@ export default function AdminView() {
     reader.readAsDataURL(file);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) compressImage(file, setBroadcastImageBase64);
+    if (!file) return;
+
+    if (file.type.startsWith('video/')) {
+      if (file.size > 40 * 1024 * 1024) {
+        alert("Video hajmi juda katta! Maksimal 40MB video yuklashingiz mumkin.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setBroadcastMediaBase64(event.target?.result as string);
+        setBroadcastMediaType('video');
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type.startsWith('image/')) {
+      compressImage(file, (base64) => {
+        setBroadcastMediaBase64(base64);
+        setBroadcastMediaType('image');
+      });
+    } else {
+      alert("Iltimos, rasm yoki video fayl tanlang.");
+    }
   };
 
   const handleChannelImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -265,18 +288,29 @@ export default function AdminView() {
 
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!broadcastText && !broadcastImageBase64) return;
+    if (!broadcastText && !broadcastMediaBase64) return;
     setBroadcasting(true);
     try {
       const res = await fetch(`${API_URL}/admin/broadcast`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ text: broadcastText, imageBase64: broadcastImageBase64 })
+        body: JSON.stringify({ 
+          text: broadcastText, 
+          mediaBase64: broadcastMediaBase64,
+          mediaType: broadcastMediaType,
+          buttonText: broadcastButtonText,
+          buttonUrl: broadcastButtonUrl
+        })
       });
       if (res.ok) {
-        alert('Xabar yuborildi!');
+        alert('✅ Xabarnoma yuborish boshlandi!');
         setBroadcastText('');
-        setBroadcastImageBase64(null);
+        setBroadcastMediaBase64(null);
+        setBroadcastMediaType(null);
+        setBroadcastButtonText('');
+        setBroadcastButtonUrl('');
+        const fileInput = document.getElementById('broadcast-image-input') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
       } else {
         alert('Xatolik yuz berdi');
       }
@@ -658,17 +692,17 @@ export default function AdminView() {
             <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Hammaga xabar yuborish</h2>
             <form onSubmit={handleBroadcast} className="cyber-card" style={{ padding: '20px' }}>
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>Rasm (ixtiyoriy):</label>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>Rasm yoki Video (ixtiyoriy):</label>
                 
                 <input 
                   type="file" 
                   id="broadcast-image-input"
-                  accept="image/*" 
-                  onChange={handleImageUpload}
+                  accept="image/*,video/*" 
+                  onChange={handleMediaUpload}
                   style={{ display: 'none' }} 
                 />
                 
-                {!broadcastImageBase64 ? (
+                {!broadcastMediaBase64 ? (
                   <label 
                     htmlFor="broadcast-image-input" 
                     style={{
@@ -696,8 +730,8 @@ export default function AdminView() {
                     }}
                   >
                     <Upload size={28} style={{ marginBottom: '8px', filter: 'drop-shadow(0 0 5px var(--accent-cyan))' }} />
-                    <span style={{ fontSize: '14px', fontWeight: '600' }}>Rasm tanlash</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>PNG, JPG formatlar (avtomatik siqiladi)</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600' }}>Rasm yoki Video tanlash</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>PNG, JPG, MP4, MOV formatlar (maks 40MB)</span>
                   </label>
                 ) : (
                   <div 
@@ -713,25 +747,42 @@ export default function AdminView() {
                       boxShadow: '0 0 15px rgba(176, 38, 255, 0.15)'
                     }}
                   >
-                    <img 
-                      src={broadcastImageBase64} 
-                      alt="preview" 
-                      style={{ 
-                        width: '60px', 
-                        height: '60px', 
-                        objectFit: 'cover', 
-                        borderRadius: '8px', 
-                        border: '1px solid rgba(255,255,255,0.1)' 
-                      }} 
-                    />
+                    {broadcastMediaType === 'video' ? (
+                      <video 
+                        src={broadcastMediaBase64} 
+                        controls
+                        style={{ 
+                          width: '80px', 
+                          height: '60px', 
+                          objectFit: 'cover', 
+                          borderRadius: '8px', 
+                          border: '1px solid rgba(255,255,255,0.1)' 
+                        }} 
+                      />
+                    ) : (
+                      <img 
+                        src={broadcastMediaBase64} 
+                        alt="preview" 
+                        style={{ 
+                          width: '60px', 
+                          height: '60px', 
+                          objectFit: 'cover', 
+                          borderRadius: '8px', 
+                          border: '1px solid rgba(255,255,255,0.1)' 
+                        }} 
+                      />
+                    )}
                     <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>Rasm tanlandi</div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>
+                        {broadcastMediaType === 'video' ? '🎬 Video tanlandi' : '🖼️ Rasm tanlandi'}
+                      </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Yuklashga tayyor</div>
                     </div>
                     <button 
                       type="button" 
                       onClick={() => {
-                        setBroadcastImageBase64(null);
+                        setBroadcastMediaBase64(null);
+                        setBroadcastMediaType(null);
                         const fileInput = document.getElementById('broadcast-image-input') as HTMLInputElement;
                         if (fileInput) fileInput.value = '';
                       }}
@@ -761,14 +812,43 @@ export default function AdminView() {
                   </div>
                 )}
               </div>
-              <textarea 
-                className="cyber-input" 
-                style={{ height: '100px', width: '100%', resize: 'vertical', marginBottom: '16px' }}
-                placeholder="Xabar matni (barcha foydalanuvchilarga boradi)..." 
-                value={broadcastText} 
-                onChange={e => setBroadcastText(e.target.value)} 
-                required={!broadcastImageBase64} 
-              />
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>Xabar matni:</label>
+                <textarea 
+                  className="cyber-input" 
+                  style={{ height: '100px', width: '100%', resize: 'vertical' }}
+                  placeholder="Xabar matni (barcha foydalanuvchilarga boradi)..." 
+                  value={broadcastText} 
+                  onChange={e => setBroadcastText(e.target.value)} 
+                  required={!broadcastMediaBase64} 
+                />
+              </div>
+
+              {/* Inline Button Option */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: 'var(--text-muted)', fontWeight: '500' }}>Tugma matni (ixtiyoriy):</label>
+                  <input 
+                    type="text" 
+                    className="cyber-input" 
+                    placeholder="masalan: 📢 Kanalga o'tish" 
+                    value={broadcastButtonText} 
+                    onChange={e => setBroadcastButtonText(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: 'var(--text-muted)', fontWeight: '500' }}>Tugma havolasi (URL):</label>
+                  <input 
+                    type="url" 
+                    className="cyber-input" 
+                    placeholder="https://t.me/..." 
+                    value={broadcastButtonUrl} 
+                    onChange={e => setBroadcastButtonUrl(e.target.value)} 
+                  />
+                </div>
+              </div>
+
               <button type="submit" className="neon-btn" disabled={broadcasting} style={{ background: 'linear-gradient(90deg, #1d4ed8, #3b82f6)' }}>
                 {broadcasting ? <div className="spinner"></div> : <><Send size={16} style={{ display: 'inline', marginRight: '5px' }} /> Yuborish</>}
               </button>

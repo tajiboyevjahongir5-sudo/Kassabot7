@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
 import NodeCache from 'node-cache';
+import { Markup } from 'telegraf';
 import { prisma } from './prisma';
 import { bot } from './bot';
 
@@ -14,8 +15,8 @@ const cache = new NodeCache({ stdTTL: 30, checkperiod: 10, useClones: false });
 export const app = express();
 app.use(cors());
 app.use(compression()); // gzip all responses — reduces bandwidth up to 70%
-app.use(express.json({ limit: '10mb' }));  // reduced from 50mb — no need for huge payloads
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 
 
@@ -656,48 +657,66 @@ app.post('/api/admin/cards/rotate', requireAdmin, async (req, res) => {
   }
 });
 
-// Broadcast message - parallel batch sending for speed
+// Broadcast message - parallel batch sending for speed (supports photo, video, text, inline button)
 app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
-  const { text, imageBase64 } = req.body;
-  if (!text && !imageBase64) return res.status(400).json({ error: 'Message text or image required' });
+  const { text, mediaBase64, mediaType, imageBase64, buttonText, buttonUrl } = req.body;
+  
+  const rawMedia = mediaBase64 || imageBase64;
+  if (!text && !rawMedia) {
+    return res.status(400).json({ error: 'Xabar matni, rasm yoki video kiritilishi shart' });
+  }
 
-  // Respond immediately so admin panel doesn't freeze
   res.json({ success: true, message: 'Broadcast started' });
 
   try {
     const users = await prisma.user.findMany({ select: { id: true } });
     
-    let imageBuffer: Buffer | null = null;
-    if (imageBase64) {
-      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-      imageBuffer = Buffer.from(base64Data, 'base64');
+    let mediaBuffer: Buffer | null = null;
+    if (rawMedia) {
+      const base64Data = rawMedia.replace(/^data:(image|video)\/\w+;base64,/, "");
+      mediaBuffer = Buffer.from(base64Data, 'base64');
     }
     
+    const isVideo = mediaType === 'video' || (rawMedia && rawMedia.startsWith('data:video/'));
+
+    // Prepare optional inline keyboard
+    let extraOptions: any = {};
+    if (buttonText && buttonUrl) {
+      try {
+        extraOptions.reply_markup = Markup.inlineKeyboard([
+          Markup.button.url(buttonText, buttonUrl)
+        ]).reply_markup;
+      } catch (err) {
+        console.error('Broadcast inline button error:', err);
+      }
+    }
+
     const BATCH_SIZE = 25; // Send 25 at a time
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     const sendOne = async (userId: string) => {
       try {
-        if (imageBuffer) {
-          await bot.telegram.sendPhoto(userId, { source: imageBuffer! }, { caption: text || '' });
+        if (mediaBuffer && isVideo) {
+          await bot.telegram.sendVideo(userId, { source: mediaBuffer }, { caption: text || '', ...extraOptions });
+        } else if (mediaBuffer) {
+          await bot.telegram.sendPhoto(userId, { source: mediaBuffer }, { caption: text || '', ...extraOptions });
         } else {
-          await bot.telegram.sendMessage(userId, text);
+          await bot.telegram.sendMessage(userId, text || '', extraOptions);
         }
       } catch (e) {
         // user blocked bot or other error — skip
       }
     };
 
-    // Process in batches of BATCH_SIZE
     for (let i = 0; i < users.length; i += BATCH_SIZE) {
       const batch = users.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(u => sendOne(u.id)));
       if (i + BATCH_SIZE < users.length) {
-        await sleep(300); // small pause between batches to respect rate limits
+        await sleep(300);
       }
     }
     
-    console.log(`Broadcast done: sent to ${users.length} users`);
+    console.log(`Broadcast done: sent to ${users.length} users (isVideo: ${isVideo})`);
   } catch (err) {
     console.error('Broadcast failed:', err);
   }
