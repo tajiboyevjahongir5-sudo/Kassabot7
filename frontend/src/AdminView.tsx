@@ -261,8 +261,8 @@ export default function AdminView() {
     if (!file) return;
 
     if (file.type.startsWith('video/')) {
-      if (file.size > 40 * 1024 * 1024) {
-        alert("Video hajmi juda katta! Maksimal 40MB video yuklashingiz mumkin.");
+      if (file.size > 50 * 1024 * 1024) {
+        alert("Video hajmi juda katta! Telegram Bot API serverlari orqali maksimal 50MB video yuborish mumkin.");
         return;
       }
       const reader = new FileReader();
@@ -731,7 +731,7 @@ export default function AdminView() {
                   >
                     <Upload size={28} style={{ marginBottom: '8px', filter: 'drop-shadow(0 0 5px var(--accent-cyan))' }} />
                     <span style={{ fontSize: '14px', fontWeight: '600' }}>Rasm yoki Video tanlash</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>PNG, JPG, MP4, MOV formatlar (maks 40MB)</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>PNG, JPG, MP4, MOV formatlar (maks 50MB)</span>
                   </label>
                 ) : (
                   <div 
