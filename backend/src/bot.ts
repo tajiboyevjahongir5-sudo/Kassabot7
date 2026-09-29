@@ -111,6 +111,85 @@ bot.command('admin', async (ctx) => {
   );
 });
 
+// ============ ADMIN STATE TRACKING ============
+const adminStates = new Map<string, string>();
+
+// /setjoinmsg — Admin sets the join request welcome message (text/photo/video)
+bot.command('setjoinmsg', async (ctx) => {
+  if (!isAdmin(ctx.from.id.toString())) return;
+
+  adminStates.set(ctx.from.id.toString(), 'waiting_join_msg');
+  await ctx.reply(
+    '📩 <b>Zayavka xabarini o\'rnatish</b>\n\nQuyidagilardan birini yuboring:\n• Matnli xabar\n• Rasm (caption bilan)\n• Video (caption bilan)\n\n❌ Bekor qilish uchun /cancel yozing.',
+    { parse_mode: 'HTML' }
+  );
+});
+
+bot.command('cancel', async (ctx) => {
+  if (adminStates.has(ctx.from.id.toString())) {
+    adminStates.delete(ctx.from.id.toString());
+    await ctx.reply('❌ Bekor qilindi.');
+  }
+});
+
+// Capture admin's join request message (photo/video/text)
+bot.use(async (ctx, next) => {
+  if (!ctx.from || !ctx.message) return next();
+  const state = adminStates.get(ctx.from.id.toString());
+  if (state !== 'waiting_join_msg') return next();
+
+  adminStates.delete(ctx.from.id.toString());
+
+  try {
+    const msg = ctx.message as any;
+    let mediaType: string | null = null;
+    let mediaFileId: string | null = null;
+    let caption: string | null = null;
+
+    if (msg.photo) {
+      mediaType = 'photo';
+      mediaFileId = msg.photo[msg.photo.length - 1].file_id;
+      caption = msg.caption || null;
+    } else if (msg.video) {
+      mediaType = 'video';
+      mediaFileId = msg.video.file_id;
+      caption = msg.caption || null;
+    } else if (msg.animation) {
+      mediaType = 'animation';
+      mediaFileId = msg.animation.file_id;
+      caption = msg.caption || null;
+    } else if (msg.text) {
+      caption = msg.text;
+    } else {
+      await ctx.reply('❌ Bu turdagi xabar qo\'llab-quvvatlanmaydi. Matn, rasm yoki video yuboring.');
+      return;
+    }
+
+    await prisma.settings.upsert({
+      where: { id: 1 },
+      update: {
+        joinRequestMessage: caption,
+        joinRequestMediaType: mediaType,
+        joinRequestMediaFileId: mediaFileId
+      },
+      create: {
+        id: 1,
+        joinRequestMessage: caption,
+        joinRequestMediaType: mediaType,
+        joinRequestMediaFileId: mediaFileId
+      }
+    });
+
+    await ctx.reply(
+      '✅ <b>Zayavka xabari saqlandi!</b>\n\nEndi maxfiy kanalga qo\'shilish so\'rovi yuborilganda, bot ushbu xabarni avtomatik yuboradi.',
+      { parse_mode: 'HTML' }
+    );
+  } catch (err) {
+    console.error('setjoinmsg error:', err);
+    await ctx.reply('❌ Xatolik yuz berdi.');
+  }
+});
+
 // ✅ Check subscription callback — fires when user clicks "Tekshirish"
 bot.action('check_subscription', async (ctx) => {
   await ctx.answerCbQuery();
@@ -590,17 +669,40 @@ bot.on('chat_join_request', async (ctx) => {
         create: { id: userId, username: user.username, firstName: user.first_name }
       });
 
-      // Send custom message or default
-      const message = settings.joinRequestMessage
-        || `🎉 Salom! "${channelTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
-
+      // Send custom message (photo/video/text) with inline button
       const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
-      await bot.telegram.sendMessage(userId, message, {
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [[{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }]]
+      const caption = settings.joinRequestMessage
+        || `🎉 Salom! "${channelTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
+      const replyMarkup = {
+        inline_keyboard: [[{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }]]
+      };
+
+      try {
+        if (settings.joinRequestMediaType === 'photo' && settings.joinRequestMediaFileId) {
+          await bot.telegram.sendPhoto(userId, settings.joinRequestMediaFileId, {
+            caption,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup
+          });
+        } else if (settings.joinRequestMediaType === 'video' && settings.joinRequestMediaFileId) {
+          await bot.telegram.sendVideo(userId, settings.joinRequestMediaFileId, {
+            caption,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup
+          });
+        } else if (settings.joinRequestMediaType === 'animation' && settings.joinRequestMediaFileId) {
+          await bot.telegram.sendAnimation(userId, settings.joinRequestMediaFileId, {
+            caption,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup
+          });
+        } else {
+          await bot.telegram.sendMessage(userId, caption, {
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup
+          });
         }
-      }).catch(() => {});
+      } catch (e) {}
 
       return; // Don't process further
     }
