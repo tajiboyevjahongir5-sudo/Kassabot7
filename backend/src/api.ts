@@ -99,6 +99,41 @@ app.get('/api/subscriptions/:userId', async (req, res) => {
   }
 });
 
+// Check mandatory subscriptions for WebApp
+app.post('/api/check-subscription', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  try {
+    const mandatoryChannels = await prisma.mandatoryChannel.findMany({ orderBy: { order: 'asc' } });
+    if (mandatoryChannels.length === 0) return res.json({ ok: true, missing: [] });
+
+    const missing: any[] = [];
+    for (const ch of mandatoryChannels) {
+      try {
+        if ((ch as any).type === 'BOT') {
+          const isSubbed = await prisma.botSubscriber.findFirst({
+            where: { userId: String(userId), logChannelId: ch.channelId }
+          });
+          if (!isSubbed) missing.push(ch);
+        } else {
+          const member = await bot.telegram.getChatMember(ch.channelId, Number(userId));
+          if (!['member', 'administrator', 'creator'].includes(member.status)) {
+            missing.push(ch);
+          }
+        }
+      } catch {
+        missing.push(ch);
+      }
+    }
+
+    res.json({ ok: missing.length === 0, missing });
+  } catch (err) {
+    console.error('check-subscription error:', err);
+    res.json({ ok: true, missing: [] }); // fail open
+  }
+});
+
 // Create manual payment with random suffix
 app.post('/api/create-payment', async (req, res) => {
   const { channelId, planId, userId, promoCode } = req.body;

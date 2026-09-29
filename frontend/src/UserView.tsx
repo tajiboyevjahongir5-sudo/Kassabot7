@@ -35,6 +35,9 @@ function UserView() {
   const [complaintSent, setComplaintSent] = useState(false);
   const [complaintLoading, setComplaintLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [subCheckLoading, setSubCheckLoading] = useState(true);
+  const [subOk, setSubOk] = useState(true);
+  const [missingChannels, setMissingChannels] = useState<any[]>([]);
 
   const handleCopy = () => {
     if (cardNumber) {
@@ -50,6 +53,28 @@ function UserView() {
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+  const checkSubscription = async () => {
+    const userId = tg?.initDataUnsafe?.user?.id;
+    if (!userId) {
+      setSubCheckLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/check-subscription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      setSubOk(data.ok);
+      setMissingChannels(data.missing || []);
+    } catch (err) {
+      console.error('Sub check error:', err);
+      setSubOk(true); // fail open
+    }
+    setSubCheckLoading(false);
+  };
+
   useEffect(() => {
     // Initialize Telegram Web App
     if (tg) {
@@ -59,6 +84,9 @@ function UserView() {
       document.documentElement.style.setProperty('--bg-color', tg.themeParams.bg_color || '#0b0c10');
       document.documentElement.style.setProperty('--text-main', tg.themeParams.text_color || '#f0f2f5');
     }
+
+    // Check mandatory subscriptions first
+    checkSubscription();
 
     // Fetch channels and plans
     fetch(`${API_URL}/channels`)
@@ -153,6 +181,49 @@ function UserView() {
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <div className="spinner"></div>
       </div>
+    );
+  }
+
+  // Show subscription required screen if not subscribed
+  if (!subCheckLoading && !subOk && missingChannels.length > 0) {
+    return (
+      <>
+        <div className="aurora-bg"></div>
+        <div style={{ 
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          minHeight: '100vh', padding: '20px', textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>Obuna talab qilinadi</h2>
+          <p style={{ fontSize: '14px', opacity: 0.7, marginBottom: '24px' }}>
+            Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo'lishingiz shart:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '300px', marginBottom: '24px' }}>
+            {missingChannels.map((ch: any) => (
+              <a
+                key={ch.id}
+                href={ch.inviteLink || `https://t.me/${ch.channelId.replace('@', '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="neon-btn"
+                style={{ textDecoration: 'none', textAlign: 'center', display: 'block' }}
+              >
+                📢 {ch.title}
+              </a>
+            ))}
+          </div>
+          <button 
+            className="neon-btn" 
+            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', width: '100%', maxWidth: '300px' }}
+            onClick={() => {
+              setSubCheckLoading(true);
+              checkSubscription();
+            }}
+          >
+            ✅ Tekshirish
+          </button>
+        </div>
+      </>
     );
   }
 

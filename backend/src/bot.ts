@@ -670,11 +670,11 @@ bot.on('chat_join_request', async (ctx) => {
       });
 
       // Send custom message (photo/video/text) with inline button
-      const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
+      const botInfo = await bot.telegram.getMe();
       const caption = settings.joinRequestMessage
         || `🎉 Salom! "${channelTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
       const replyMarkup = {
-        inline_keyboard: [[{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }]]
+        inline_keyboard: [[{ text: '📲 KANALGA KIRISH', url: `https://t.me/${botInfo.username}?start=welcome` }]]
       };
 
       try {
