@@ -30,7 +30,7 @@ export default function AdminView() {
   const [activeTab, setActiveTab] = useState('payments'); // payments, channels, cards, users, broadcast, stats, settings
 
   // Settings
-  const [settings, setSettings] = useState({ paymentChannelId: '' });
+  const [settings, setSettings] = useState({ paymentChannelId: '', joinRequestChannelId: '', joinRequestLink: '', joinRequestMessage: '' });
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Broadcast
@@ -606,6 +606,48 @@ export default function AdminView() {
                 />
                 <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Bot ushbu kanalda admin bo'lishi va kanalga kelgan to'lov haqidagi xabarlarni ko'ra olishi kerak.</p>
               </div>
+
+              <div style={{ marginTop: '20px', marginBottom: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#3b82f6', marginBottom: '12px' }}>📩 Zayavka (Join Request) Sozlamalari</h3>
+                <p style={{ fontSize: '11px', opacity: 0.6, marginBottom: '12px' }}>Maxfiy kanalga qo'shilish so'rovi yuborilganda bot avtomatik tasdiqlaydi va foydalanuvchiga xabar yuboradi.</p>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Zayavka Kanal ID</label>
+                <input 
+                  className="cyber-input" 
+                  style={{ width: '100%' }}
+                  placeholder="-100..." 
+                  value={settings.joinRequestChannelId || ''} 
+                  onChange={e => setSettings({...settings, joinRequestChannelId: e.target.value})} 
+                />
+                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Maxfiy kanalning ID raqami. Bot ushbu kanalda admin bo'lishi shart.</p>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Kanal havolasi</label>
+                <input 
+                  className="cyber-input" 
+                  style={{ width: '100%' }}
+                  placeholder="https://t.me/+abc123" 
+                  value={settings.joinRequestLink || ''} 
+                  onChange={e => setSettings({...settings, joinRequestLink: e.target.value})} 
+                />
+                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Kanalga qo'shilish uchun havola (join request bilan).</p>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Foydalanuvchiga yuboriladigan xabar</label>
+                <textarea 
+                  className="cyber-input" 
+                  style={{ width: '100%', minHeight: '80px', resize: 'vertical' }}
+                  placeholder="🎉 Salom! Kanalga xush kelibsiz! Botimiz orqali VIP obuna sotib olishingiz mumkin." 
+                  value={settings.joinRequestMessage || ''} 
+                  onChange={e => setSettings({...settings, joinRequestMessage: e.target.value})} 
+                />
+                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>HTML formatda yozishingiz mumkin. Bo'sh qoldirsangiz standart xabar yuboriladi.</p>
+              </div>
+
               <button type="submit" className="neon-btn" disabled={savingSettings}>
                 {savingSettings ? <div className="spinner"></div> : <><Save size={16} style={{ display: 'inline', marginRight: '5px' }} /> Saqlash</>}
               </button>

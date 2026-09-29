@@ -51,9 +51,12 @@ model Subscription {
 }
 
 model Settings {
-  id               Int     @id @default(1)
-  paymentChannelId String?
-  rubRate          Float   @default(155)
+  id                    Int     @id @default(1)
+  paymentChannelId      String?
+  rubRate               Float   @default(155)
+  joinRequestChannelId  String? // Maxfiy kanal ID (masalan: -100xxx)
+  joinRequestLink       String? // Kanalga havola (masalan: https://t.me/+abc)
+  joinRequestMessage    String? // Foydalanuvchiga yuboriladigan xabar
 }
 
 model MandatoryChannel {

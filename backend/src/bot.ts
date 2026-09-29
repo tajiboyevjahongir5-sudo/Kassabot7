@@ -575,7 +575,37 @@ bot.on('chat_join_request', async (ctx) => {
   console.log(`[Join Request] User ${userId} requested to join channel ${channelId} (${channelTitle})`);
 
   try {
-    // Check if user has an active subscription for this channel
+    // 1. Check if this is the "joinRequest" channel from Settings (auto-approve + send message)
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (settings?.joinRequestChannelId && settings.joinRequestChannelId === channelId) {
+      // Auto-approve the join request
+      await bot.telegram.approveChatJoinRequest(channelId, ctx.chatJoinRequest.from.id);
+      console.log(`[Join Request] Auto-approved user ${userId} for joinRequest channel ${channelId}`);
+
+      // Save user to DB
+      const user = ctx.chatJoinRequest.from;
+      await prisma.user.upsert({
+        where: { id: userId },
+        update: { username: user.username, firstName: user.first_name },
+        create: { id: userId, username: user.username, firstName: user.first_name }
+      });
+
+      // Send custom message or default
+      const message = settings.joinRequestMessage
+        || `🎉 Salom! "${channelTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
+
+      const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
+      await bot.telegram.sendMessage(userId, message, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [[{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }]]
+        }
+      }).catch(() => {});
+
+      return; // Don't process further
+    }
+
+    // 2. Standard flow: Check if user has an active subscription for this channel
     const activeSub = await prisma.subscription.findFirst({
       where: {
         userId,

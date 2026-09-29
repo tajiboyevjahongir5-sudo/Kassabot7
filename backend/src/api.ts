@@ -399,12 +399,18 @@ app.get('/api/admin/settings', async (req, res) => {
 
 // Update settings
 app.post('/api/admin/settings', requireAdmin, async (req, res) => {
-  const { paymentChannelId } = req.body;
+  const { paymentChannelId, joinRequestChannelId, joinRequestLink, joinRequestMessage } = req.body;
   try {
+    const updateData: any = {};
+    if (paymentChannelId !== undefined) updateData.paymentChannelId = paymentChannelId;
+    if (joinRequestChannelId !== undefined) updateData.joinRequestChannelId = joinRequestChannelId;
+    if (joinRequestLink !== undefined) updateData.joinRequestLink = joinRequestLink;
+    if (joinRequestMessage !== undefined) updateData.joinRequestMessage = joinRequestMessage;
+
     const settings = await prisma.settings.upsert({
       where: { id: 1 },
-      update: { paymentChannelId },
-      create: { id: 1, paymentChannelId }
+      update: updateData,
+      create: { id: 1, ...updateData }
     });
     res.json(settings);
   } catch (err) {
