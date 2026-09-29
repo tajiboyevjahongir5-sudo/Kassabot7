@@ -670,11 +670,11 @@ bot.on('chat_join_request', async (ctx) => {
       });
 
       // Send custom message (photo/video/text) with inline button
-      const channelLink = settings.joinRequestLink || `https://t.me/${channelTitle}`;
+      const botInfo = await bot.telegram.getMe();
       const caption = settings.joinRequestMessage
         || `🎉 Salom! "${channelTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
       const replyMarkup = {
-        inline_keyboard: [[{ text: '📲 KANALGA KIRISH', url: channelLink }]]
+        inline_keyboard: [[{ text: '📲 KANALGA KIRISH', url: `https://t.me/${botInfo.username}?start=start` }]]
       };
 
       try {
