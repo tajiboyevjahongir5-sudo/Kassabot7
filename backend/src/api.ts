@@ -480,13 +480,14 @@ app.get('/api/admin/settings', async (req, res) => {
 
 // Update settings
 app.post('/api/admin/settings', requireAdmin, async (req, res) => {
-  const { paymentChannelId, joinRequestChannelId, joinRequestLink, joinRequestMessage } = req.body;
+  const { paymentChannelId, joinRequestChannelId, joinRequestLink, joinRequestMessage, clickP2pUrl } = req.body;
   try {
     const updateData: any = {};
     if (paymentChannelId !== undefined) updateData.paymentChannelId = paymentChannelId;
     if (joinRequestChannelId !== undefined) updateData.joinRequestChannelId = joinRequestChannelId;
     if (joinRequestLink !== undefined) updateData.joinRequestLink = joinRequestLink;
     if (joinRequestMessage !== undefined) updateData.joinRequestMessage = joinRequestMessage;
+    if (clickP2pUrl !== undefined) updateData.clickP2pUrl = clickP2pUrl;
 
     const settings = await prisma.settings.upsert({
       where: { id: 1 },
@@ -1123,7 +1124,8 @@ app.get('/api/settings', async (req, res) => {
     res.json({ 
       cardNumber: activeCard ? activeCard.cardNumber : '',
       cardHolder: activeCard ? activeCard.cardHolder : '',
-      rubRate: settings.rubRate || 155
+      rubRate: settings.rubRate || 155,
+      clickP2pUrl: settings.clickP2pUrl || ''
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get settings' });

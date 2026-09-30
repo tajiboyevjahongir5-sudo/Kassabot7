@@ -32,6 +32,7 @@ function UserView() {
   const [activePayment, setActivePayment] = useState<any>(null);
   const [cardNumber, setCardNumber] = useState<string>('');
   const [cardHolder, setCardHolder] = useState<string>('');
+  const [clickP2pUrl, setClickP2pUrl] = useState<string>('https://my.click.uz/clickp2p/C06ECB532D9343697037D7B7ABE7375562668EE6FB8327DC05EDD96B6C4E4445');
   const [complaintSent, setComplaintSent] = useState(false);
   const [complaintLoading, setComplaintLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -51,13 +52,41 @@ function UserView() {
   };
 
   const openPaymentApp = (appName: 'payme' | 'click' | 'uzum') => {
+    const amount = activePayment?.amount || 0;
+    const cleanCard = cardNumber.replace(/\s+/g, '');
+
+    if (appName === 'click') {
+      // 1. To'lanadigan aniq summani avtomatik nusxalash (Click P2P kartani o'zi tanlaydi, summa buferda tayyor turadi)
+      try {
+        navigator.clipboard.writeText(String(amount));
+      } catch (e) {
+        if (cleanCard) navigator.clipboard.writeText(cleanCard);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+
+      if (tg && tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('medium');
+      }
+
+      // 2. Click P2P havolasi (kartani avtomat tanlab ochadi)
+      const baseUrl = clickP2pUrl || 'https://my.click.uz/clickp2p/C06ECB532D9343697037D7B7ABE7375562668EE6FB8327DC05EDD96B6C4E4445';
+      const sep = baseUrl.includes('?') ? '&' : '?';
+      const finalClickUrl = `${baseUrl}${sep}amount=${amount}&sum=${amount}&summa=${amount}`;
+
+      if (tg && typeof tg.openLink === 'function') {
+        tg.openLink(finalClickUrl);
+      } else {
+        window.open(finalClickUrl, '_blank');
+      }
+      return;
+    }
+
+    // Payme va Uzum uchun
     if (!cardNumber) {
       alert("Karta raqami topilmadi!");
       return;
     }
-    const cleanCard = cardNumber.replace(/\s+/g, '');
-
-    // Karta raqamini avtomatik nusxalash (Click va Payme ilovasi ochilganda buferdan taniydi)
     try {
       navigator.clipboard.writeText(cleanCard);
     } catch (e) {}
@@ -69,7 +98,6 @@ function UserView() {
       tg.HapticFeedback.impactOccurred('medium');
     }
 
-    // Telegram WebApp dan ilovani xatosiz ochish uchun backend bridge
     const redirectUrl = `${window.location.origin}/api/pay/redirect/${appName}`;
     if (tg && typeof tg.openLink === 'function') {
       tg.openLink(redirectUrl);
@@ -138,6 +166,7 @@ function UserView() {
       .then(data => {
         if (data.cardNumber) setCardNumber(data.cardNumber);
         if (data.cardHolder) setCardHolder(data.cardHolder);
+        if (data.clickP2pUrl) setClickP2pUrl(data.clickP2pUrl);
       })
       .catch(err => console.error(err));
   }, []);
@@ -512,8 +541,8 @@ function UserView() {
                   Uzum
                 </button>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
-                Tugmani bossangiz, karta nusxalanadi va ilova ochiladi
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '8px', textAlign: 'center' }}>
+                🟢 <b>Click</b> bosilganda karta avtomat tanlanadi va to'lanadigan summa xotiraga nusxalanadi!
               </div>
             </div>
 

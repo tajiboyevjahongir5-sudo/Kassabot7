@@ -30,7 +30,7 @@ export default function AdminView() {
   const [activeTab, setActiveTab] = useState('payments'); // payments, channels, cards, users, broadcast, stats, settings
 
   // Settings
-  const [settings, setSettings] = useState({ paymentChannelId: '', joinRequestChannelId: '', joinRequestLink: '', joinRequestMessage: '' });
+  const [settings, setSettings] = useState({ paymentChannelId: '', joinRequestChannelId: '', joinRequestLink: '', joinRequestMessage: '', clickP2pUrl: '' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [joinRequestsCount, setJoinRequestsCount] = useState<number>(0);
   const [approvingJoinRequests, setApprovingJoinRequests] = useState<boolean>(false);
@@ -663,6 +663,20 @@ export default function AdminView() {
                   onChange={e => setSettings({...settings, paymentChannelId: e.target.value})} 
                 />
                 <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Bot ushbu kanalda admin bo'lishi va kanalga kelgan to'lov haqidagi xabarlarni ko'ra olishi kerak.</p>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>🔗 Click P2P Havolasi (Kartaga avtomat o'tish uchun)</label>
+                <input 
+                  className="cyber-input" 
+                  style={{ width: '100%' }}
+                  placeholder="https://my.click.uz/clickp2p/..." 
+                  value={settings.clickP2pUrl || ''} 
+                  onChange={e => setSettings({...settings, clickP2pUrl: e.target.value})} 
+                />
+                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>
+                  Click ilovasidagi shaxsiy P2P havolangiz. Foydalanuvchi "Click" tugmasini bosganda kartangiz avtomatik tanlanib ochiladi.
+                </p>
               </div>
 
               <div style={{ marginTop: '20px', marginBottom: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
