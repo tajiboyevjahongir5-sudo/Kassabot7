@@ -50,6 +50,38 @@ function UserView() {
     }
   };
 
+  const openPaymentApp = (appName: 'payme' | 'click' | 'uzum') => {
+    if (!cardNumber) {
+      alert("Karta raqami topilmadi!");
+      return;
+    }
+    const cleanCard = cardNumber.replace(/\s+/g, '');
+    const amount = activePayment?.amount || 0;
+
+    // Karta raqamini avtomatik nusxalash (ehtiyot shart)
+    navigator.clipboard.writeText(cleanCard);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    if (tg && tg.HapticFeedback) {
+      tg.HapticFeedback.impactOccurred('medium');
+    }
+
+    let url = '';
+    if (appName === 'payme') {
+      url = `https://payme.uz/fallback/transfer/${cleanCard}`;
+    } else if (appName === 'click') {
+      url = `https://my.click.uz/services/p2p?card_num=${cleanCard}&amount=${amount}`;
+    } else if (appName === 'uzum') {
+      url = `https://bank.uzum.uz/p2p?card=${cleanCard}&amount=${amount}`;
+    }
+
+    if (tg && typeof tg.openLink === 'function') {
+      tg.openLink(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
   // Use relative path by default so it works correctly on production domain
   const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -398,10 +430,99 @@ function UserView() {
               )}
             </div>
 
-            <div style={{ background: 'rgba(176, 38, 255, 0.1)', border: '1px solid var(--accent)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+            <div style={{ background: 'rgba(176, 38, 255, 0.1)', border: '1px solid var(--accent)', padding: '15px', borderRadius: '12px', marginBottom: '16px' }}>
               <div style={{ fontSize: '12px', color: 'var(--accent)' }}>To'lanadigan summa:</div>
               <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff', userSelect: 'all', textShadow: '0 0 10px rgba(176, 38, 255, 0.5)' }}>
                 {activePayment.amount.toLocaleString('ru-RU')} UZS
+              </div>
+            </div>
+
+            {/* Quick Payment Apps */}
+            <div style={{ 
+              marginBottom: '20px', 
+              background: 'rgba(255, 255, 255, 0.03)', 
+              border: '1px solid rgba(255, 255, 255, 0.08)', 
+              borderRadius: '14px', 
+              padding: '14px' 
+            }}>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: '10px', textAlign: 'center', fontWeight: '600' }}>
+                ⚡ Ilova orqali 1 bosishda to'lash:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => openPaymentApp('click')}
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    padding: '10px 4px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.25)',
+                    transition: 'transform 0.15s ease'
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>🟢</span>
+                  Click
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openPaymentApp('payme')}
+                  style={{
+                    background: 'linear-gradient(135deg, #0d9488, #0f766e)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    padding: '10px 4px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: '0 4px 12px rgba(13, 148, 136, 0.25)',
+                    transition: 'transform 0.15s ease'
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>🔵</span>
+                  Payme
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openPaymentApp('uzum')}
+                  style={{
+                    background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    padding: '10px 4px',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)',
+                    transition: 'transform 0.15s ease'
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>🟣</span>
+                  Uzum
+                </button>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
+                Tugmani bossangiz, karta nusxalanadi va ilova ochiladi
               </div>
             </div>
 
