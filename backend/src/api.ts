@@ -1208,10 +1208,10 @@ app.use('/assets', (req, res, next) => {
 
 // Serve static files from frontend build
 app.use(express.static(path.join(__dirname, '../../frontend/dist'), {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    }
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
   }
 }));
 
