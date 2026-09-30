@@ -60,6 +60,8 @@ export default function AdminView() {
   const [newCardNumber, setNewCardNumber] = useState('');
   const [newCardHolder, setNewCardHolder] = useState('');
   const [newCardBank, setNewCardBank] = useState('');
+  const [newCardClickUrl, setNewCardClickUrl] = useState('');
+  const [editingCard, setEditingCard] = useState<any>(null);
 
   // Mandatory Channels
   const [mandatoryChannels, setMandatoryChannels] = useState<any[]>([]);
@@ -564,7 +566,18 @@ export default function AdminView() {
                   </div>
 
                   {/* Bank info */}
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>{card.bankName} — {card.cardHolder}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>{card.bankName} — {card.cardHolder}</div>
+
+                  {/* Click P2P Link display */}
+                  {card.clickP2pUrl ? (
+                    <div style={{ fontSize: '11px', color: '#60a5fa', marginBottom: '10px', background: 'rgba(59, 130, 246, 0.08)', padding: '5px 8px', borderRadius: '6px', wordBreak: 'break-all' }}>
+                      🔗 <b>Click:</b> {card.clickP2pUrl}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '10px' }}>
+                      🔗 Click havola kiritilmagan
+                    </div>
+                  )}
 
                   {/* Progress bar */}
                   <div className="progress-track" style={{ marginBottom: '6px' }}>
@@ -586,6 +599,9 @@ export default function AdminView() {
                         fetchData();
                       }} className="action-btn activate" style={{ flex: 1 }}>Faollashtirish</button>
                     )}
+                    <button onClick={() => setEditingCard({ ...card })} className="action-btn" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '6px 12px' }}>
+                      ✏️ Tahrirlash
+                    </button>
                     <button onClick={async () => {
                       if (!confirm("Limitni nolga tushirasizmi?")) return;
                       await fetch(`${API_URL}/admin/cards/${card.id}/reset`, { method: 'POST', headers });
@@ -601,6 +617,116 @@ export default function AdminView() {
               ))}
             </div>
 
+            {/* Edit Card Modal */}
+            {editingCard && (
+              <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '20px'
+              }}>
+                <div style={{
+                  background: '#151726', border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%',
+                  boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#60a5fa', margin: 0 }}>
+                      ✏️ Kartani tahrirlash (Slot {editingCard.slot})
+                    </h3>
+                    <button 
+                      onClick={() => setEditingCard(null)} 
+                      style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}
+                    >✕</button>
+                  </div>
+
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      const res = await fetch(`${API_URL}/admin/cards/${editingCard.id}`, {
+                        method: 'PUT',
+                        headers,
+                        body: JSON.stringify({
+                          slot: editingCard.slot,
+                          cardNumber: editingCard.cardNumber,
+                          cardHolder: editingCard.cardHolder,
+                          bankName: editingCard.bankName,
+                          maxTransfers: editingCard.maxTransfers,
+                          clickP2pUrl: editingCard.clickP2pUrl
+                        })
+                      });
+                      if (res.ok) {
+                        alert("Karta muvaffaqiyatli saqlandi!");
+                        setEditingCard(null);
+                        fetchData();
+                      } else {
+                        alert("Xatolik yuz berdi");
+                      }
+                    } catch {
+                      alert("Server bilan bog'lanishda xatolik");
+                    }
+                  }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>Slot (1-10)</label>
+                        <input className="cyber-input" style={{ width: '100%' }} type="number" min="1" max="10" required
+                          value={editingCard.slot} onChange={e => setEditingCard({ ...editingCard, slot: e.target.value })} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>Limit (tushum)</label>
+                        <input className="cyber-input" style={{ width: '100%' }} type="number" min="1" required
+                          value={editingCard.maxTransfers} onChange={e => setEditingCard({ ...editingCard, maxTransfers: e.target.value })} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>Karta raqami</label>
+                      <input className="cyber-input" style={{ width: '100%' }} required
+                        value={editingCard.cardNumber} onChange={e => setEditingCard({ ...editingCard, cardNumber: e.target.value })} />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>Egasi (ism)</label>
+                        <input className="cyber-input" style={{ width: '100%' }}
+                          value={editingCard.cardHolder} onChange={e => setEditingCard({ ...editingCard, cardHolder: e.target.value })} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.7, display: 'block', marginBottom: '4px' }}>Bank nomi</label>
+                        <input className="cyber-input" style={{ width: '100%' }}
+                          value={editingCard.bankName} onChange={e => setEditingCard({ ...editingCard, bankName: e.target.value })} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', color: '#60a5fa', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
+                        🔗 Bu karta uchun Click P2P Havolasi
+                      </label>
+                      <input 
+                        className="cyber-input" 
+                        style={{ width: '100%' }} 
+                        placeholder="https://my.click.uz/clickp2p/..."
+                        value={editingCard.clickP2pUrl || ''} 
+                        onChange={e => setEditingCard({ ...editingCard, clickP2pUrl: e.target.value })} 
+                      />
+                      <p style={{ fontSize: '10px', opacity: 0.6, margin: '4px 0 0 0' }}>
+                        Karta navbati kelib aktiv bo'lganda, foydalanuvchiga aynan shu Click havola ochiladi.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                      <button type="button" onClick={() => setEditingCard(null)} className="neon-btn" style={{ flex: 1, background: 'rgba(255,255,255,0.1)' }}>
+                        Bekor qilish
+                      </button>
+                      <button type="submit" className="neon-btn" style={{ flex: 1, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}>
+                        💾 Saqlash
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '4px', color: '#e0b3ff' }}>Yangi karta qo'shish</h3>
             {cards.length >= 10 && (
               <div style={{ marginBottom: '12px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,0,85,0.1)', border: '1px solid rgba(255,0,85,0.3)', fontSize: '13px', color: '#ff6b9d' }}>
@@ -614,11 +740,18 @@ export default function AdminView() {
                 const res = await fetch(`${API_URL}/admin/cards`, {
                   method: 'POST',
                   headers,
-                  body: JSON.stringify({ slot: newCardSlot, cardNumber: newCardNumber, cardHolder: newCardHolder, bankName: newCardBank, maxTransfers: 40 })
+                  body: JSON.stringify({ 
+                    slot: newCardSlot, 
+                    cardNumber: newCardNumber, 
+                    cardHolder: newCardHolder, 
+                    bankName: newCardBank, 
+                    clickP2pUrl: newCardClickUrl,
+                    maxTransfers: 40 
+                  })
                 });
                 const data = await res.json();
                 if (res.ok) {
-                  setNewCardSlot(''); setNewCardNumber(''); setNewCardHolder(''); setNewCardBank('');
+                  setNewCardSlot(''); setNewCardNumber(''); setNewCardHolder(''); setNewCardBank(''); setNewCardClickUrl('');
                   fetchData();
                 } else {
                   alert(data.error || 'Xatolik');
@@ -641,6 +774,16 @@ export default function AdminView() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <input className="cyber-input" placeholder="Egasi (ism)" value={newCardHolder} onChange={e => setNewCardHolder(e.target.value)} disabled={cards.length >= 10} />
                 <input className="cyber-input" placeholder="Bank nomi" value={newCardBank} onChange={e => setNewCardBank(e.target.value)} disabled={cards.length >= 10} />
+              </div>
+              <div>
+                <input 
+                  className="cyber-input" 
+                  style={{ width: '100%' }}
+                  placeholder="Click P2P havolasi (masalan: https://my.click.uz/clickp2p/...)" 
+                  value={newCardClickUrl} 
+                  onChange={e => setNewCardClickUrl(e.target.value)} 
+                  disabled={cards.length >= 10} 
+                />
               </div>
               <button type="submit" className="neon-btn" style={{ width: '100%', marginTop: '4px' }} disabled={cards.length >= 10}>Qo'shish</button>
             </form>

@@ -98,6 +98,7 @@ model Card {
   cardNumber     String
   cardHolder     String   @default("")
   bankName       String   @default("")
+  clickP2pUrl    String?  // Har bir karta uchun alohida Click P2P havolasi
   transferCount  Int      @default(0)
   maxTransfers   Int      @default(40)
   isActive       Boolean  @default(false)

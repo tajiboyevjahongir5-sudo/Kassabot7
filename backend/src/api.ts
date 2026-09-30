@@ -700,7 +700,7 @@ app.get('/api/cards', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/cards', requireAdmin, async (req, res) => {
   try {
-    const { slot, cardNumber, cardHolder, bankName, maxTransfers } = req.body;
+    const { slot, cardNumber, cardHolder, bankName, maxTransfers, clickP2pUrl } = req.body;
     
     // Max 10 cards limit
     const cardCount = await prisma.card.count();
@@ -720,6 +720,7 @@ app.post('/api/admin/cards', requireAdmin, async (req, res) => {
         cardNumber, 
         cardHolder, 
         bankName, 
+        clickP2pUrl: clickP2pUrl ? String(clickP2pUrl).trim() : null,
         maxTransfers: Number(maxTransfers) || 40,
         isActive: cardCount === 0 // Avtomatik aktiv qilish, agar bu 1-karta bo'lsa
       }
@@ -735,10 +736,17 @@ app.post('/api/admin/cards', requireAdmin, async (req, res) => {
 
 app.put('/api/admin/cards/:id', requireAdmin, async (req, res) => {
   try {
-    const { cardNumber, cardHolder, bankName, maxTransfers, slot } = req.body;
+    const { cardNumber, cardHolder, bankName, maxTransfers, slot, clickP2pUrl } = req.body;
     const card = await prisma.card.update({
       where: { id: Number(req.params.id) },
-      data: { cardNumber, cardHolder, bankName, maxTransfers: Number(maxTransfers), slot: Number(slot) }
+      data: { 
+        cardNumber, 
+        cardHolder, 
+        bankName, 
+        clickP2pUrl: clickP2pUrl !== undefined ? (clickP2pUrl ? String(clickP2pUrl).trim() : null) : undefined,
+        maxTransfers: Number(maxTransfers), 
+        slot: Number(slot) 
+      }
     });
     res.json(card);
   } catch (err) {
@@ -1125,7 +1133,7 @@ app.get('/api/settings', async (req, res) => {
       cardNumber: activeCard ? activeCard.cardNumber : '',
       cardHolder: activeCard ? activeCard.cardHolder : '',
       rubRate: settings.rubRate || 155,
-      clickP2pUrl: settings.clickP2pUrl || ''
+      clickP2pUrl: (activeCard && activeCard.clickP2pUrl) ? activeCard.clickP2pUrl : (settings.clickP2pUrl || '')
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get settings' });
