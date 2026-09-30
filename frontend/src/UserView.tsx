@@ -274,7 +274,7 @@ function UserView() {
   return (
     <>
       <div className="aurora-bg"></div>
-      <header>
+      <header style={{ marginBottom: '16px' }}>
         <div className="logo-text">DIORA VIP</div>
         <div className="header-controls">
           <div className="icon-btn">✨</div>
@@ -285,11 +285,6 @@ function UserView() {
           )}
         </div>
       </header>
-
-      <div className="title-container">
-        <h1 className="gradient-title">Premium Obuna</h1>
-        <p className="subtitle">Yopiq guruhlar va maxsus materiallarga kirish</p>
-      </div>
 
       <main>
         {activePayment ? (
