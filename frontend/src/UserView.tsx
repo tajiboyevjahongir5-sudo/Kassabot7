@@ -56,30 +56,42 @@ function UserView() {
       return;
     }
     const cleanCard = cardNumber.replace(/\s+/g, '');
-    const amount = activePayment?.amount || 0;
 
-    // Karta raqamini avtomatik nusxalash (ehtiyot shart)
-    navigator.clipboard.writeText(cleanCard);
+    // 1. Karta raqamini avtomatik nusxalash (Click va Payme ilovasi ochilganda buferdan avtomat taniydi)
+    try {
+      navigator.clipboard.writeText(cleanCard);
+    } catch (e) {}
+
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 3000);
+
     if (tg && tg.HapticFeedback) {
       tg.HapticFeedback.impactOccurred('medium');
     }
 
-    let url = '';
-    if (appName === 'payme') {
-      url = `https://payme.uz/fallback/transfer/${cleanCard}`;
-    } else if (appName === 'click') {
-      url = `https://my.click.uz/services/p2p?card_num=${cleanCard}&amount=${amount}`;
+    // 2. To'g'ridan-to'g'ri telefon ilovasini (App) ochuvchi maxsus sxemalar
+    let appScheme = '';
+    if (appName === 'click') {
+      appScheme = 'clickuz://';
+    } else if (appName === 'payme') {
+      appScheme = 'payme://';
     } else if (appName === 'uzum') {
-      url = `https://bank.uzum.uz/p2p?card=${cleanCard}&amount=${amount}`;
+      appScheme = 'uzumbank://';
     }
 
-    if (tg && typeof tg.openLink === 'function') {
-      tg.openLink(url);
-    } else {
-      window.open(url, '_blank');
-    }
+    // 3. Brauzerga bormasdan, to'g'ridan-to'g'ri ilovani ochish
+    try {
+      const a = document.createElement('a');
+      a.href = appScheme;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {}
+
+    setTimeout(() => {
+      window.location.href = appScheme;
+    }, 50);
   };
 
   // Use relative path by default so it works correctly on production domain
