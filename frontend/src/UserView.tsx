@@ -434,37 +434,68 @@ function UserView() {
             {/* Quick Click Payment Button */}
             <div style={{ 
               marginBottom: '20px', 
-              background: 'rgba(255, 255, 255, 0.03)', 
-              border: '1px solid rgba(255, 255, 255, 0.08)', 
-              borderRadius: '14px', 
-              padding: '14px' 
+              background: 'linear-gradient(180deg, rgba(0, 115, 255, 0.08) 0%, rgba(0, 115, 255, 0.02) 100%)', 
+              border: '1px solid rgba(0, 140, 255, 0.25)', 
+              borderRadius: '16px', 
+              padding: '16px',
+              boxShadow: '0 8px 24px -6px rgba(0, 100, 255, 0.15)'
             }}>
               <button
                 type="button"
                 onClick={openPaymentApp}
                 style={{
                   width: '100%',
-                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                  border: '1px solid rgba(255,255,255,0.25)',
+                  background: 'linear-gradient(135deg, #0056e0 0%, #0076ff 50%, #00b4d8 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.35)',
                   color: '#fff',
-                  padding: '14px 20px',
-                  borderRadius: '12px',
+                  padding: '14px 18px',
+                  borderRadius: '14px',
                   fontWeight: '700',
-                  fontSize: '15px',
+                  fontSize: '16px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '10px',
-                  boxShadow: '0 4px 15px rgba(2, 132, 199, 0.35)',
-                  transition: 'transform 0.15s ease'
+                  gap: '12px',
+                  boxShadow: '0 8px 25px -4px rgba(0, 115, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  WebkitTapHighlightColor: 'transparent'
                 }}
               >
-                <span style={{ fontSize: '18px' }}>🟢</span>
-                Click orqali to'lash
+                <div style={{
+                  background: '#ffffff',
+                  borderRadius: '8px',
+                  padding: '5px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)'
+                }}>
+                  <svg viewBox="0 0 21333.4 5394.4" style={{ height: '18px', width: 'auto', display: 'block' }}>
+                    <path fill="#0065FF" d="M5350.2 2718.41c0,1029.91 -1646.14,2676.08 -2676.08,2676.08 -1029.94,0 -2676.1,-1646.17 -2676.1,-2676.08 0,-1029.92 1646.16,-2676.13 2676.1,-2676.13 1029.94,0 2676.08,1646.21 2676.08,2676.13zm-1605.66 0c0,411.96 -658.48,1070.42 -1070.42,1070.42 -411.99,0 -1070.45,-658.46 -1070.45,-1070.42 0,-411.96 658.49,-1070.45 1070.45,-1070.45 411.94,0 1070.42,658.49 1070.42,1070.45z"/>
+                    <path fill="#192024" d="M8264.48 5394.14c998.68,0 1624.56,-625.88 1814.45,-1448.73l-1097.11 0c-133.6,281.3 -344.59,492.29 -717.34,492.29 -450.1,0 -780.62,-323.49 -780.62,-879.1 0,-555.57 330.52,-879.1 780.62,-879.1 372.75,0 583.74,210.98 717.34,492.32l1097.11 0c-189.89,-822.84 -815.77,-1448.77 -1814.45,-1448.77 -1068.99,0 -1849.61,815.82 -1849.61,1835.55 0,1019.77 780.62,1835.54 1849.61,1835.54zm2188.96 -77.34l1061.96 0 0 -5274.56 -1061.96 0 0 5274.56zm2224.12 -3994.62c372.74,0 668.11,-295.37 668.11,-661.08 0,-365.68 -295.37,-661.05 -668.11,-661.05 -358.65,0 -661.09,295.37 -661.09,661.05 0,365.71 302.44,661.08 661.09,661.08zm-527.45 3994.62l1061.96 0 0 -3516.36 -1061.96 0 0 3516.36zm3335.3 77.34c998.67,0 1624.56,-625.88 1814.45,-1448.73l-1097.12 0c-133.6,281.3 -344.58,492.29 -717.33,492.29 -450.1,0 -780.62,-323.49 -780.62,-879.1 0,-555.57 330.52,-879.1 780.62,-879.1 372.75,0 583.73,210.98 717.33,492.32l1097.12 0c-189.89,-822.84 -815.78,-1448.77 -1814.45,-1448.77 -1068.99,0 -1849.61,815.82 -1849.61,1835.55 0,1019.77 780.62,1835.54 1849.61,1835.54zm4558.97 -77.34l1287.01 0 -1603.46 -1926.96 1294.03 -1589.4 -1258.88 0 -1026.76 1258.84 0 -3017.04 -1061.96 0 0 5274.56 1061.96 0 0 -1568.31 1308.06 1568.31z"/>
+                  </svg>
+                </div>
+                <span style={{ letterSpacing: '0.2px' }}>orqali to'lash</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.9 }}>
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </button>
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '8px', textAlign: 'center' }}>
-                Bosilganda karta avtomat tanlanadi va to'lanadigan summa xotiraga nusxalanadi!
+              <div style={{ 
+                fontSize: '11.5px', 
+                color: 'rgba(255, 255, 255, 0.75)', 
+                marginTop: '10px', 
+                textAlign: 'center',
+                lineHeight: '1.4',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ color: '#38bdf8', fontSize: '13px' }}>⚡</span>
+                <span>Bosilganda Click ochiladi va summa nusxalanadi</span>
               </div>
             </div>
 
