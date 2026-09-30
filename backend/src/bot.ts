@@ -654,12 +654,11 @@ bot.on('chat_join_request', async (ctx) => {
   console.log(`[Join Request] User ${userId} requested to join channel ${channelId} (${channelTitle})`);
 
   try {
-    // 1. Check if this is the "joinRequest" channel from Settings (auto-approve + send message)
+    // 1. Check if this is the "joinRequest" channel from Settings (send message WITHOUT approving)
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
     if (settings?.joinRequestChannelId && settings.joinRequestChannelId === channelId) {
-      // Auto-approve the join request
-      await bot.telegram.approveChatJoinRequest(channelId, ctx.chatJoinRequest.from.id);
-      console.log(`[Join Request] Auto-approved user ${userId} for joinRequest channel ${channelId}`);
+      // Do NOT approve — just send a message to the user
+      console.log(`[Join Request] User ${userId} requested to join ${channelId} — sending message (not approving)`);
 
       // Save user to DB
       const user = ctx.chatJoinRequest.from;
