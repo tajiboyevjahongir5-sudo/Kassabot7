@@ -80,6 +80,17 @@ model BotSubscriber {
   @@unique([userId, logChannelId])
 }
 
+model JoinRequest {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  channelId String
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt DateTime @default(now())
+
+  @@unique([userId, channelId])
+  @@index([channelId, status])
+}
+
 model Card {
   id             Int      @id @default(autoincrement())
   slot           Int      @unique // 1..10, determines rotation order

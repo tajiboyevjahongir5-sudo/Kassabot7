@@ -668,6 +668,13 @@ bot.on('chat_join_request', async (ctx) => {
         create: { id: userId, username: user.username, firstName: user.first_name }
       });
 
+      // Save join request to track count and mass-approve later
+      await prisma.joinRequest.upsert({
+        where: { userId_channelId: { userId, channelId } },
+        update: { status: 'PENDING', createdAt: new Date() },
+        create: { userId, channelId, status: 'PENDING' }
+      });
+
       // Send custom message (photo/video/text) with inline button
       const botInfo = await bot.telegram.getMe();
       const caption = settings.joinRequestMessage

@@ -453,6 +453,74 @@ app.post('/api/admin/settings', requireAdmin, async (req, res) => {
   }
 });
 
+// Get pending join requests count (real-time)
+app.get('/api/admin/join-requests/stats', requireAdmin, async (req, res) => {
+  try {
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (!settings?.joinRequestChannelId) {
+      return res.json({ count: 0 });
+    }
+    const count = await prisma.joinRequest.count({
+      where: {
+        channelId: settings.joinRequestChannelId,
+        status: 'PENDING'
+      }
+    });
+    res.json({ count });
+  } catch (err) {
+    console.error('join-requests stats error:', err);
+    res.status(500).json({ error: 'Failed to get join requests stats' });
+  }
+});
+
+// Mass approve all pending join requests
+app.post('/api/admin/join-requests/approve-all', requireAdmin, async (req, res) => {
+  try {
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (!settings?.joinRequestChannelId) {
+      return res.status(400).json({ error: 'Zayavka kanali sozlanmagan' });
+    }
+    const pending = await prisma.joinRequest.findMany({
+      where: {
+        channelId: settings.joinRequestChannelId,
+        status: 'PENDING'
+      }
+    });
+
+    if (pending.length === 0) {
+      return res.json({ success: true, approvedCount: 0, failedCount: 0, total: 0 });
+    }
+
+    let approvedCount = 0;
+    let failedCount = 0;
+
+    for (const item of pending) {
+      try {
+        await bot.telegram.approveChatJoinRequest(item.channelId, Number(item.userId));
+        await prisma.joinRequest.update({
+          where: { id: item.id },
+          data: { status: 'APPROVED' }
+        });
+        approvedCount++;
+        // Rate limiting oldini olish uchun 40ms kutish
+        await new Promise(resolve => setTimeout(resolve, 40));
+      } catch (e: any) {
+        console.error(`Approve error for user ${item.userId}:`, e?.message || e);
+        await prisma.joinRequest.update({
+          where: { id: item.id },
+          data: { status: 'PROCESSED' }
+        }).catch(() => {});
+        failedCount++;
+      }
+    }
+
+    res.json({ success: true, approvedCount, failedCount, total: pending.length });
+  } catch (err) {
+    console.error('approve-all error:', err);
+    res.status(500).json({ error: 'Failed to approve join requests' });
+  }
+});
+
 // Get users — paginated (50 per page), with optional search
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {

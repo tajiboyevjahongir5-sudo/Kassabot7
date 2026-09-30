@@ -32,6 +32,8 @@ export default function AdminView() {
   // Settings
   const [settings, setSettings] = useState({ paymentChannelId: '', joinRequestChannelId: '', joinRequestLink: '', joinRequestMessage: '' });
   const [savingSettings, setSavingSettings] = useState(false);
+  const [joinRequestsCount, setJoinRequestsCount] = useState<number>(0);
+  const [approvingJoinRequests, setApprovingJoinRequests] = useState<boolean>(false);
 
   // Broadcast
   const [broadcastText, setBroadcastText] = useState('');
@@ -117,10 +119,29 @@ export default function AdminView() {
       // Fetch monthly revenue separately
       const monthlyRes = await fetch(`${API_URL}/admin/monthly-revenue`, { headers });
       if (monthlyRes.ok) setMonthlyRevenue(await monthlyRes.json());
+
+      // Fetch pending join requests stats
+      const jrRes = await fetch(`${API_URL}/admin/join-requests/stats`, { headers });
+      if (jrRes.ok) {
+        const jrData = await jrRes.json();
+        setJoinRequestsCount(jrData.count || 0);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchJoinRequestStats = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin/join-requests/stats`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setJoinRequestsCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error('fetchJoinRequestStats error:', err);
     }
   };
 
@@ -136,6 +157,13 @@ export default function AdminView() {
       document.documentElement.style.setProperty('--text-main', tg.themeParams.text_color || '#f0f2f5');
     }
     fetchData();
+
+    // Real-time polling for join requests (every 5 seconds)
+    const jrInterval = setInterval(() => {
+      fetchJoinRequestStats();
+    }, 5000);
+
+    return () => clearInterval(jrInterval);
   }, []);
 
   const handleAddChannel = async (e: React.FormEvent) => {
@@ -336,6 +364,36 @@ export default function AdminView() {
       alert('Xatolik');
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleApproveAllJoinRequests = async () => {
+    if (joinRequestsCount === 0) {
+      alert("Hozircha kutilayotgan zayavkalar yo'q.");
+      return;
+    }
+    if (!confirm(`Haqiqatan ham barcha (${joinRequestsCount} ta) zayavkalarni kanalga qabul qilmoqchimisiz?`)) {
+      return;
+    }
+
+    setApprovingJoinRequests(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/join-requests/approve-all`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Muvaffaqiyatli: ${data.approvedCount} ta foydalanuvchi kanalga qo'shildi!${data.failedCount > 0 ? ` (${data.failedCount} tasida xato/allaqachon a'zo)` : ''}`);
+        fetchJoinRequestStats();
+      } else {
+        alert(data.error || "Xatolik yuz berdi");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
+    } finally {
+      setApprovingJoinRequests(false);
     }
   };
 
@@ -608,8 +666,64 @@ export default function AdminView() {
               </div>
 
               <div style={{ marginTop: '20px', marginBottom: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#3b82f6', marginBottom: '12px' }}>📩 Zayavka (Join Request) Sozlamalari</h3>
-                <p style={{ fontSize: '11px', opacity: 0.6, marginBottom: '12px' }}>Maxfiy kanalga qo'shilish so'rovi yuborilganda bot avtomatik tasdiqlaydi va foydalanuvchiga xabar yuboradi.</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#3b82f6', margin: 0 }}>📩 Zayavka (Join Request) Sozlamalari</h3>
+                  <span style={{ 
+                    padding: '3px 10px', 
+                    borderRadius: '12px', 
+                    fontSize: '11px', 
+                    fontWeight: '700',
+                    background: joinRequestsCount > 0 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                    color: joinRequestsCount > 0 ? '#60a5fa' : 'var(--text-muted)',
+                    border: '1px solid ' + (joinRequestsCount > 0 ? '#3b82f6' : 'rgba(255,255,255,0.1)')
+                  }}>
+                    ⚡ Kutilmoqda: {joinRequestsCount} ta
+                  </span>
+                </div>
+                <p style={{ fontSize: '11px', opacity: 0.6, marginBottom: '14px' }}>
+                  Maxfiy kanalga qo'shilish so'rovi yuborilganda bot foydalanuvchini kanalga qo'shmasdan xabar yuboradi. Barcha zayafkalarni bitta tugma orqali birdaniga qabul qilishingiz mumkin.
+                </p>
+
+                {/* Mass approve card */}
+                <div style={{ 
+                  marginBottom: '18px', 
+                  background: 'rgba(59, 130, 246, 0.08)', 
+                  border: '1px solid rgba(59, 130, 246, 0.25)', 
+                  borderRadius: '10px', 
+                  padding: '12px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '13px' }}>
+                      Kutilayotgan zayavkalar: <span style={{ color: '#60a5fa', fontWeight: '700', fontSize: '14px' }}>{joinRequestsCount}</span> ta
+                    </div>
+                    <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '2px' }}>
+                      Real-time yangilanadi (har 5 soniyada)
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="neon-btn"
+                    style={{ 
+                      background: joinRequestsCount > 0 ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'rgba(255,255,255,0.1)',
+                      cursor: joinRequestsCount > 0 && !approvingJoinRequests ? 'pointer' : 'not-allowed',
+                      padding: '8px 16px',
+                      fontSize: '12px'
+                    }}
+                    disabled={joinRequestsCount === 0 || approvingJoinRequests}
+                    onClick={handleApproveAllJoinRequests}
+                  >
+                    {approvingJoinRequests ? (
+                      <div className="spinner" style={{ width: '14px', height: '14px' }}></div>
+                    ) : (
+                      <>✅ Barchasini qabul qilish ({joinRequestsCount})</>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div style={{ marginBottom: '15px' }}>
