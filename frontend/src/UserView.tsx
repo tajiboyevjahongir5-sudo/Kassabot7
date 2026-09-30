@@ -57,7 +57,7 @@ function UserView() {
     }
     const cleanCard = cardNumber.replace(/\s+/g, '');
 
-    // 1. Karta raqamini avtomatik nusxalash (Click va Payme ilovasi ochilganda buferdan avtomat taniydi)
+    // Karta raqamini avtomatik nusxalash (Click va Payme ilovasi ochilganda buferdan taniydi)
     try {
       navigator.clipboard.writeText(cleanCard);
     } catch (e) {}
@@ -69,29 +69,13 @@ function UserView() {
       tg.HapticFeedback.impactOccurred('medium');
     }
 
-    // 2. To'g'ridan-to'g'ri telefon ilovasini (App) ochuvchi maxsus sxemalar
-    let appScheme = '';
-    if (appName === 'click') {
-      appScheme = 'clickuz://';
-    } else if (appName === 'payme') {
-      appScheme = 'payme://';
-    } else if (appName === 'uzum') {
-      appScheme = 'uzumbank://';
+    // Telegram WebApp dan ilovani xatosiz ochish uchun backend bridge
+    const redirectUrl = `${window.location.origin}/api/pay/redirect/${appName}`;
+    if (tg && typeof tg.openLink === 'function') {
+      tg.openLink(redirectUrl);
+    } else {
+      window.location.href = redirectUrl;
     }
-
-    // 3. Brauzerga bormasdan, to'g'ridan-to'g'ri ilovani ochish
-    try {
-      const a = document.createElement('a');
-      a.href = appScheme;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e) {}
-
-    setTimeout(() => {
-      window.location.href = appScheme;
-    }, 50);
   };
 
   // Use relative path by default so it works correctly on production domain

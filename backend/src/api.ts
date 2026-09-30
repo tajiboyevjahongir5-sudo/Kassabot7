@@ -25,6 +25,52 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// App deep link redirect bridge for Click, Payme, and Uzum
+app.get('/api/pay/redirect/:app', (req, res) => {
+  const { app } = req.params;
+  let scheme = 'clickuz://';
+  let appName = 'Click';
+  let icon = '🟢';
+
+  if (app === 'payme') {
+    scheme = 'payme://';
+    appName = 'Payme';
+    icon = '🔵';
+  } else if (app === 'uzum') {
+    scheme = 'uzumbank://';
+    appName = 'Uzum Bank';
+    icon = '🟣';
+  }
+
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${appName} ga o'tish</title>
+  <style>
+    body { background: #0b0c10; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; text-align: center; }
+    .card { background: #1a1c29; border: 1px solid rgba(255,255,255,0.1); border-radius: 18px; padding: 28px 20px; max-width: 320px; width: 100%; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+    .btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; padding: 14px 20px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px; display: block; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size: 42px; margin-bottom: 12px;">${icon}</div>
+    <h2 style="margin: 0 0 8px 0; font-size: 18px;">${appName} ilovasi ochilmoqda...</h2>
+    <p style="opacity: 0.7; font-size: 13px; margin: 0 0 8px 0;">Karta raqami buferga nusxalandi.</p>
+    <p style="opacity: 0.5; font-size: 12px; margin: 0;">Agar ilova avtomatik ochilmasa, pastdagi tugmani bosing:</p>
+    <a class="btn" href="${scheme}">Ilovani ochish</a>
+  </div>
+  <script>
+    setTimeout(function() {
+      window.location.href = "${scheme}";
+    }, 100);
+  </script>
+</body>
+</html>`);
+});
+
 // Serve static files from frontend build is handled at the bottom of the file
 
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
