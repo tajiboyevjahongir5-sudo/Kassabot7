@@ -51,7 +51,7 @@ function UserView() {
     }
   };
 
-  const openPaymentApp = (appName: string = 'click') => {
+  const openPaymentApp = () => {
     const amount = activePayment?.amount || 0;
     const cleanCard = cardNumber.replace(/\s+/g, '');
 
@@ -441,7 +441,7 @@ function UserView() {
             }}>
               <button
                 type="button"
-                onClick={() => openPaymentApp('click')}
+                onClick={openPaymentApp}
                 style={{
                   width: '100%',
                   background: 'linear-gradient(135deg, #0284c7, #0369a1)',
