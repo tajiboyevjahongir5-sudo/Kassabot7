@@ -51,46 +51,16 @@ function UserView() {
     }
   };
 
-  const openPaymentApp = (appName: 'payme' | 'click' | 'uzum') => {
+  const openPaymentApp = (appName: string = 'click') => {
     const amount = activePayment?.amount || 0;
     const cleanCard = cardNumber.replace(/\s+/g, '');
 
-    if (appName === 'click') {
-      // 1. To'lanadigan aniq summani avtomatik nusxalash (Click P2P kartani o'zi tanlaydi, summa buferda tayyor turadi)
-      try {
-        navigator.clipboard.writeText(String(amount));
-      } catch (e) {
-        if (cleanCard) navigator.clipboard.writeText(cleanCard);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-
-      if (tg && tg.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('medium');
-      }
-
-      // 2. Click P2P havolasi (kartani avtomat tanlab ochadi)
-      const baseUrl = clickP2pUrl || 'https://my.click.uz/clickp2p/C06ECB532D9343697037D7B7ABE7375562668EE6FB8327DC05EDD96B6C4E4445';
-      const sep = baseUrl.includes('?') ? '&' : '?';
-      const finalClickUrl = `${baseUrl}${sep}amount=${amount}&sum=${amount}&summa=${amount}`;
-
-      if (tg && typeof tg.openLink === 'function') {
-        tg.openLink(finalClickUrl);
-      } else {
-        window.open(finalClickUrl, '_blank');
-      }
-      return;
-    }
-
-    // Payme va Uzum uchun
-    if (!cardNumber) {
-      alert("Karta raqami topilmadi!");
-      return;
-    }
+    // 1. To'lanadigan aniq summani avtomatik nusxalash (Click P2P kartani o'zi tanlaydi, summa buferda tayyor turadi)
     try {
-      navigator.clipboard.writeText(cleanCard);
-    } catch (e) {}
-
+      navigator.clipboard.writeText(String(amount));
+    } catch (e) {
+      if (cleanCard) navigator.clipboard.writeText(cleanCard);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
 
@@ -98,11 +68,15 @@ function UserView() {
       tg.HapticFeedback.impactOccurred('medium');
     }
 
-    const redirectUrl = `${window.location.origin}/api/pay/redirect/${appName}`;
+    // 2. Click P2P havolasi (kartani avtomat tanlab ochadi)
+    const baseUrl = clickP2pUrl || 'https://my.click.uz/clickp2p/C06ECB532D9343697037D7B7ABE7375562668EE6FB8327DC05EDD96B6C4E4445';
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    const finalClickUrl = `${baseUrl}${sep}amount=${amount}&sum=${amount}&summa=${amount}`;
+
     if (tg && typeof tg.openLink === 'function') {
-      tg.openLink(redirectUrl);
+      tg.openLink(finalClickUrl);
     } else {
-      window.location.href = redirectUrl;
+      window.open(finalClickUrl, '_blank');
     }
   };
 
@@ -457,7 +431,7 @@ function UserView() {
               </div>
             </div>
 
-            {/* Quick Payment Apps */}
+            {/* Quick Click Payment Button */}
             <div style={{ 
               marginBottom: '20px', 
               background: 'rgba(255, 255, 255, 0.03)', 
@@ -465,84 +439,32 @@ function UserView() {
               borderRadius: '14px', 
               padding: '14px' 
             }}>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: '10px', textAlign: 'center', fontWeight: '600' }}>
-                ⚡ Ilova orqali 1 bosishda to'lash:
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => openPaymentApp('click')}
-                  style={{
-                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
-                    padding: '10px 4px',
-                    borderRadius: '10px',
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.25)',
-                    transition: 'transform 0.15s ease'
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>🟢</span>
-                  Click
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openPaymentApp('payme')}
-                  style={{
-                    background: 'linear-gradient(135deg, #0d9488, #0f766e)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
-                    padding: '10px 4px',
-                    borderRadius: '10px',
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 4px 12px rgba(13, 148, 136, 0.25)',
-                    transition: 'transform 0.15s ease'
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>🔵</span>
-                  Payme
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openPaymentApp('uzum')}
-                  style={{
-                    background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
-                    padding: '10px 4px',
-                    borderRadius: '10px',
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)',
-                    transition: 'transform 0.15s ease'
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>🟣</span>
-                  Uzum
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => openPaymentApp('click')}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  color: '#fff',
+                  padding: '14px 20px',
+                  borderRadius: '12px',
+                  fontWeight: '700',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  boxShadow: '0 4px 15px rgba(2, 132, 199, 0.35)',
+                  transition: 'transform 0.15s ease'
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>🟢</span>
+                Click orqali to'lash
+              </button>
               <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '8px', textAlign: 'center' }}>
-                🟢 <b>Click</b> bosilganda karta avtomat tanlanadi va to'lanadigan summa xotiraga nusxalanadi!
+                Bosilganda karta avtomat tanlanadi va to'lanadigan summa xotiraga nusxalanadi!
               </div>
             </div>
 
