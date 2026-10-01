@@ -45,7 +45,7 @@ async function main() {
       if (webAppUrl) {
         try {
           const sep = webAppUrl.includes('?') ? '&' : '?';
-          await bot.telegram.setChatMenuButton({
+          await (bot.telegram as any).callApi('setChatMenuButton', {
             menu_button: {
               type: 'web_app',
               text: 'DIORA VIP',

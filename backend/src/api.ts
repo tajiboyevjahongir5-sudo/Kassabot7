@@ -832,9 +832,9 @@ app.get('/api/live/status', async (_req, res) => {
 });
 
 // 2. Get user's live notification status and streamer permission
-app.get(['/api/live/user-state', '/api/live/user-state/:userId'], async (req, res) => {
+app.get('/api/live/user-state/:userId', async (req, res) => {
   try {
-    const userId = req.params.userId;
+    const userId = req.params.userId as string;
     if (!userId) {
       return res.json({ liveNotify: false, isStreamer: false });
     }
