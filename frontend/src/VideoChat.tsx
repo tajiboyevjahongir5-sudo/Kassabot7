@@ -314,9 +314,27 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 } },
+        video: {
+          facingMode: facing,
+          width: { ideal: 480 },
+          height: { ideal: 854 },
+          zoom: 1.0
+        } as any,
         audio: true
       });
+
+      // Try to reset zoom to 1x if supported
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          const capabilities = videoTrack.getCapabilities() as any;
+          if (capabilities.zoom) {
+            await videoTrack.applyConstraints({
+              advanced: [{ zoom: capabilities.zoom.min } as any]
+            });
+          }
+        } catch {}
+      }
 
       localStreamRef.current = stream;
       if (localVideoRef.current) {
