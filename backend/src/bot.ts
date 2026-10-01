@@ -84,6 +84,12 @@ bot.start(async (ctx) => {
     return sendSubscriptionPrompt(ctx, missing);
   }
 
+  function getFreshWebAppUrl(base: string, params: string = ''): string {
+    const sep = base.includes('?') ? '&' : '?';
+    const vTag = `_t=${Date.now()}`;
+    return params ? `${base}${sep}${params}&${vTag}` : `${base}${sep}${vTag}`;
+  }
+
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
   const payload = ctx.message && 'text' in ctx.message ? ctx.message.text.split(' ')[1] : '';
   const isVideochat = payload === 'videochat';
@@ -95,8 +101,8 @@ bot.start(async (ctx) => {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}?tab=videochat` } }],
-            [{ text: '💎 VIP Obuna sotib olish', web_app: { url: webAppUrl } }]
+            [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: getFreshWebAppUrl(webAppUrl, 'tab=videochat') } }],
+            [{ text: '💎 VIP Obuna sotib olish', web_app: { url: getFreshWebAppUrl(webAppUrl) } }]
           ]
         }
       }
@@ -110,8 +116,8 @@ bot.start(async (ctx) => {
         reply_markup: {
           keyboard: [
             [
-              { text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: `${webAppUrl}?tab=videochat` } },
-              { text: '💎 VIP Obuna', web_app: { url: webAppUrl } }
+              { text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: getFreshWebAppUrl(webAppUrl, 'tab=videochat') } },
+              { text: '💎 VIP Obuna', web_app: { url: getFreshWebAppUrl(webAppUrl) } }
             ]
           ],
           resize_keyboard: true
@@ -126,8 +132,8 @@ bot.start(async (ctx) => {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: `${webAppUrl}?tab=videochat` } }],
-            [{ text: '💎 VIP Obuna bo\'lish', web_app: { url: webAppUrl } }]
+            [{ text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: getFreshWebAppUrl(webAppUrl, 'tab=videochat') } }],
+            [{ text: '💎 VIP Obuna bo\'lish', web_app: { url: getFreshWebAppUrl(webAppUrl) } }]
           ]
         }
       }
@@ -137,13 +143,15 @@ bot.start(async (ctx) => {
 
 bot.command('videochat', async (ctx) => {
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
+  const vTag = `_t=${Date.now()}`;
+  const sep = webAppUrl.includes('?') ? '&' : '?';
   await ctx.reply(
     `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing:`,
     {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}?tab=videochat` } }]
+          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}${sep}tab=videochat&${vTag}` } }]
         ]
       }
     }
@@ -152,13 +160,15 @@ bot.command('videochat', async (ctx) => {
 
 bot.hears(['🎥 VIDEOCHAT', '🎥 VIDEOCHAT (JONLI EFIR)', 'VIDEOCHAT', 'Videochat'], async (ctx) => {
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
+  const vTag = `_t=${Date.now()}`;
+  const sep = webAppUrl.includes('?') ? '&' : '?';
   await ctx.reply(
     `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing:`,
     {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}?tab=videochat` } }]
+          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}${sep}tab=videochat&${vTag}` } }]
         ]
       }
     }

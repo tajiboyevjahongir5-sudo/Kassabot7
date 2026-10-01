@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { 
   Radio, Bell, BellOff, Video, VideoOff, Mic, MicOff, 
   Send, Eye, X, RefreshCw, Heart, Sparkles, Volume2, VolumeX, ShieldAlert 
@@ -455,7 +455,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   };
 
   // Post comment
-  const handleSendComment = async (e?: React.FormEvent) => {
+  const handleSendComment = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!newComment.trim() || sendingComment) return;
 

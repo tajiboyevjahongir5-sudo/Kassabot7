@@ -1775,7 +1775,10 @@ app.use(express.static(path.join(__dirname, '../../frontend/dist'), {
 
 // Catch-all route for frontend SPA routing
 app.use((req, res) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const filePath = path.join(__dirname, '../../frontend/dist/index.html');
   res.sendFile(filePath, (err) => {
     if (err) {
