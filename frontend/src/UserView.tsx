@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Crown, Lock, CheckCircle2, AlertTriangle, Copy, Check, Radio } from 'lucide-react';
+import { Crown, Lock, CheckCircle2, AlertTriangle, Copy, Check, Radio, Video } from 'lucide-react';
 import VideoChat from './VideoChat';
 import './index.css';
 
@@ -741,6 +741,133 @@ function UserView() {
           </div>
         ) : (
           <>
+            {/* ========================================= */}
+            {/* ASOSIY SAHIFA: VIDEOCHAT BO'LIMI KARTASI */}
+            {/* ========================================= */}
+            <div 
+              onClick={() => setCurrentTab('videochat')}
+              className="cyber-card" 
+              style={{
+                padding: '20px',
+                marginBottom: '22px',
+                cursor: 'pointer',
+                border: isLiveActive ? '1px solid #ef4444' : '1px solid rgba(239, 68, 68, 0.35)',
+                background: isLiveActive 
+                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(20, 24, 38, 0.95) 100%)' 
+                  : 'linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(20, 24, 38, 0.9) 100%)',
+                boxShadow: isLiveActive ? '0 0 30px rgba(239, 68, 68, 0.4)' : '0 10px 30px rgba(0, 0, 0, 0.4)',
+                position: 'relative',
+                overflow: 'hidden',
+                borderRadius: '18px'
+              }}
+            >
+              {/* Glowing Background Accent */}
+              <div style={{
+                position: 'absolute',
+                top: '-40px',
+                right: '-40px',
+                width: '130px',
+                height: '130px',
+                background: isLiveActive ? '#ef4444' : '#f43f5e',
+                filter: 'blur(50px)',
+                opacity: 0.35,
+                pointerEvents: 'none'
+              }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: isLiveActive ? 'rgba(239, 68, 68, 0.25)' : 'rgba(244, 63, 94, 0.15)',
+                    border: isLiveActive ? '1px solid #ef4444' : '1px solid rgba(244, 63, 94, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Video size={22} color={isLiveActive ? '#ef4444' : '#f43f5e'} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#fff', letterSpacing: '0.3px' }}>
+                      VIDEOCHAT
+                    </h3>
+                    <span style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.65)' }}>
+                      Jonli efir & Video muloqot
+                    </span>
+                  </div>
+                </div>
+
+                {isLiveActive ? (
+                  <span style={{
+                    padding: '5px 12px',
+                    borderRadius: '20px',
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 0 12px #ef4444'
+                  }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
+                    🔴 JONLI EFIR
+                  </span>
+                ) : (
+                  <span style={{
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}>
+                    ⚪ Efir boshlanmagan
+                  </span>
+                )}
+              </div>
+
+              <p style={{ fontSize: '12.5px', color: 'rgba(255, 255, 255, 0.8)', margin: '0 0 14px 0', lineHeight: '1.45' }}>
+                {isLiveActive 
+                  ? "🔴 Jonli efir boshlangan! Kamera tasvirini to'liq ekranda ko'rish va fikr qoldirish uchun kiring."
+                  : "Efir boshlanganda xabardor bo'lish uchun bildirishnomani yoqing yoki kamerangizni yoqib efir boshlang."}
+              </p>
+
+              <button
+                type="button"
+                style={{
+                  width: '100%',
+                  padding: '13px',
+                  borderRadius: '14px',
+                  border: 'none',
+                  fontWeight: '800',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  background: isLiveActive 
+                    ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
+                    : 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: isLiveActive ? '0 6px 20px rgba(239, 68, 68, 0.45)' : '0 6px 20px rgba(244, 63, 94, 0.35)'
+                }}
+              >
+                <Video size={17} />
+                <span>VIDEOCHAT BO'LIMIGA O'TISH ➜</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+              <Crown size={18} color="#eab308" />
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#fff' }}>
+                VIP Hamjamiyat Kanallari
+              </h3>
+            </div>
+
             {channels.length === 0 ? (
               <div className="cyber-card" style={{ textAlign: 'center' }}>
                 <p>Hozircha obunalar mavjud emas.</p>

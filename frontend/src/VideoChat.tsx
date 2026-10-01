@@ -528,6 +528,29 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   if (!isLiveActive && !isBroadcasting) {
     return (
       <div style={{ padding: '10px 0' }}>
+        {/* Back to main page navigation */}
+        <div style={{ marginBottom: '14px' }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '10px',
+              padding: '8px 14px',
+              color: '#fff',
+              fontSize: '13px',
+              fontWeight: '600',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            ← Asosiy sahifaga qaytish
+          </button>
+        </div>
+
         {/* Waiting Card */}
         <div className="cyber-card" style={{ 
           padding: '30px 20px', 

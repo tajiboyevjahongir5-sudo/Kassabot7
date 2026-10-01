@@ -102,19 +102,67 @@ bot.start(async (ctx) => {
       }
     );
   } else {
+    // Send persistent bottom keyboard menu (Asosiy menyu klaviaturasi)
     await ctx.reply(
-      `👋 *Diora Vip kanaliga qo'shilmoqchi bo'lsangiz pastdagi tugma orqali obuna sotib oling*`,
+      `👋 *Diora Vip kanaliga xush kelibsiz!*\n\nObuna sotib olish yoki VIDEOCHAT (jonli efir)ga kirish uchun pastdagi tugmalardan foydalaning:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          keyboard: [
+            [
+              { text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: `${webAppUrl}?tab=videochat` } },
+              { text: '💎 VIP Obuna', web_app: { url: webAppUrl } }
+            ]
+          ],
+          resize_keyboard: true
+        }
+      }
+    );
+
+    // Also send prominent inline keyboard buttons
+    await ctx.reply(
+      `👇 *Asosiy sahifaga o'tish tugmalari:*`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }],
-            [{ text: '🔴 Videochat (Jonli efir)', web_app: { url: `${webAppUrl}?tab=videochat` } }]
+            [{ text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: `${webAppUrl}?tab=videochat` } }],
+            [{ text: '💎 VIP Obuna bo\'lish', web_app: { url: webAppUrl } }]
           ]
         }
       }
     );
   }
+});
+
+bot.command('videochat', async (ctx) => {
+  const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
+  await ctx.reply(
+    `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing:`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}?tab=videochat` } }]
+        ]
+      }
+    }
+  );
+});
+
+bot.hears(['🎥 VIDEOCHAT', '🎥 VIDEOCHAT (JONLI EFIR)', 'VIDEOCHAT', 'Videochat'], async (ctx) => {
+  const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
+  await ctx.reply(
+    `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing:`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}?tab=videochat` } }]
+        ]
+      }
+    }
+  );
 });
 
 bot.command('admin', async (ctx) => {
