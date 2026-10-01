@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type FormEvent } from 'react'
 import { 
   Radio, Bell, BellOff, Video, VideoOff, Mic, MicOff, 
   Send, Eye, X, RefreshCw, Heart, Sparkles, Volume2, VolumeX, ShieldAlert,
-  Gift, Copy, Check, ArrowLeft, Loader2
+  Gift, Copy, Check, ArrowLeft, Loader2, Minimize2, Maximize2
 } from 'lucide-react';
 
 interface Comment {
@@ -210,6 +210,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [micMuted, setMicMuted] = useState<boolean>(false);
   const [videoDisabled, setVideoDisabled] = useState<boolean>(false);
   const [audioMutedForViewer, setAudioMutedForViewer] = useState<boolean>(false);
+  const [cameraFitMode, setCameraFitMode] = useState<'cover' | 'contain'>('cover');
   const [fallbackFrame, setFallbackFrame] = useState<string | null>(null);
   const [isWebRtcConnected, setIsWebRtcConnected] = useState<boolean>(false);
 
@@ -976,14 +977,13 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       }
 
       let stream: MediaStream;
+      const videoConstraints: MediaTrackConstraints = {
+        facingMode: { ideal: facing }
+      };
+
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facing },
-            width: { ideal: 720, max: 1080 },
-            height: { ideal: 1280, max: 1920 },
-            aspectRatio: { ideal: 9 / 16 }
-          },
+          video: videoConstraints,
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -993,12 +993,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       } catch (audioVideoErr) {
         console.warn('Could not get audio+video, falling back to video only:', audioVideoErr);
         stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facing },
-            width: { ideal: 720, max: 1080 },
-            height: { ideal: 1280, max: 1920 },
-            aspectRatio: { ideal: 9 / 16 }
-          },
+          video: videoConstraints,
           audio: false
         });
       }
@@ -1138,10 +1133,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       // 1. Get new video track only
       const newVideoStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: nextFacing },
-          width: { ideal: 720, max: 1080 },
-          height: { ideal: 1280, max: 1920 },
-          aspectRatio: { ideal: 9 / 16 }
+          facingMode: { ideal: nextFacing }
         }
       });
 
@@ -1642,7 +1634,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             left: 0,
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
+            objectFit: cameraFitMode,
             objectPosition: 'center',
             transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none'
           }}
@@ -1661,7 +1653,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
               left: 0,
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: cameraFitMode,
               objectPosition: 'center',
               zIndex: 1
             }}
@@ -1677,7 +1669,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                 left: 0,
                 width: '100%',
                 height: '100%',
-                objectFit: 'cover',
+                objectFit: cameraFitMode,
                 objectPosition: 'center',
                 zIndex: isWebRtcConnected ? 0 : 2,
                 opacity: isWebRtcConnected ? 0 : 1,
@@ -1808,6 +1800,30 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
         {/* Right Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          {/* Fit Mode Toggle: Keng burchak (0 Zoom) vs To'liq ekran */}
+          <button
+            type="button"
+            onClick={() => setCameraFitMode(prev => prev === 'cover' ? 'contain' : 'cover')}
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '50%',
+              background: cameraFitMode === 'contain' ? 'rgba(56, 189, 248, 0.85)' : 'rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(8px)',
+              border: '1.5px solid rgba(255,255,255,0.25)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              touchAction: 'manipulation'
+            }}
+            title={cameraFitMode === 'cover' ? "Keng burchak (0 Zoom)" : "To'liq ekran"}
+            aria-label="Kamera o'lchami"
+          >
+            {cameraFitMode === 'cover' ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+          </button>
+
           {isBroadcasting && (
             <>
               {/* Flip camera */}
