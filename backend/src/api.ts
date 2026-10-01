@@ -1084,16 +1084,63 @@ app.post('/api/live/frame', (req, res) => {
 });
 
 // ================= LIVE DONATIONS (SOVG'ALAR VA DANAT) =================
-export const DONATION_GIFTS = [
-  { id: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash' },
-  { id: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat' },
-  { id: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish' },
-  { id: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish' },
-  { id: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom' },
-  { id: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat' },
-  { id: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a' },
-  { id: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat' }
+export const DEFAULT_DONATION_GIFTS = [
+  { giftKey: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash', animationType: 'sway', glowColor: 'rgba(244, 63, 94, 0.8)', order: 1 },
+  { giftKey: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat', animationType: 'pulse', glowColor: 'rgba(245, 158, 11, 0.8)', order: 2 },
+  { giftKey: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish', animationType: 'bounce', glowColor: 'rgba(180, 83, 9, 0.8)', order: 3 },
+  { giftKey: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish', animationType: 'fly', glowColor: 'rgba(56, 189, 248, 0.9)', order: 4 },
+  { giftKey: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom', animationType: 'spin', glowColor: 'rgba(250, 204, 21, 0.95)', order: 5 },
+  { giftKey: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat', animationType: 'shake', glowColor: 'rgba(239, 68, 68, 0.9)', order: 6 },
+  { giftKey: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a', animationType: 'spin', glowColor: 'rgba(147, 197, 253, 0.95)', order: 7 },
+  { giftKey: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat', animationType: 'pulse', glowColor: 'rgba(245, 158, 11, 1)', order: 8 }
 ];
+
+// Helper to seed gifts if empty
+async function getOrSeedGifts() {
+  try {
+    let gifts = await (prisma as any).liveGift.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' }
+    });
+
+    if (!gifts || gifts.length === 0) {
+      console.log('[DONATIONS] Seeding initial live gifts...');
+      for (const dg of DEFAULT_DONATION_GIFTS) {
+        await (prisma as any).liveGift.upsert({
+          where: { giftKey: dg.giftKey },
+          update: {},
+          create: dg
+        });
+      }
+      gifts = await (prisma as any).liveGift.findMany({
+        where: { isActive: true },
+        orderBy: { order: 'asc' }
+      });
+    }
+
+    return gifts.map((g: any) => ({
+      id: g.giftKey,
+      dbId: g.id,
+      name: g.name,
+      icon: g.icon,
+      price: g.price,
+      description: g.description,
+      animationType: g.animationType || 'bounce',
+      glowColor: g.glowColor || 'rgba(245, 158, 11, 0.8)'
+    }));
+  } catch (err) {
+    console.error('getOrSeedGifts error:', err);
+    return DEFAULT_DONATION_GIFTS.map(g => ({
+      id: g.giftKey,
+      name: g.name,
+      icon: g.icon,
+      price: g.price,
+      description: g.description,
+      animationType: g.animationType,
+      glowColor: g.glowColor
+    }));
+  }
+}
 
 // Helper to trigger broadcast of donation after 30s delay
 export async function triggerDonationDisplay(donationId: number) {
@@ -1127,12 +1174,96 @@ export async function triggerDonationDisplay(donationId: number) {
   }
 }
 
-// 1. Get donation gifts list
-app.get('/api/live/gifts', (_req, res) => {
-  res.json({ gifts: DONATION_GIFTS });
+// 1. Get donation gifts list (Public for viewers & streamer)
+app.get('/api/live/gifts', async (_req, res) => {
+  const gifts = await getOrSeedGifts();
+  res.json({ gifts });
 });
 
-// 2. Create a donation (generates unique amount with suffix & gets active card)
+// 2. Admin: Get all gifts (active and inactive)
+app.get('/api/admin/gifts', requireAdmin, async (_req, res) => {
+  try {
+    await getOrSeedGifts();
+    const gifts = await (prisma as any).liveGift.findMany({
+      orderBy: { order: 'asc' }
+    });
+    res.json({ gifts });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch gifts' });
+  }
+});
+
+// 3. Admin: Add new gift
+app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
+  try {
+    const { name, icon, price, description, animationType, glowColor } = req.body;
+    if (!name || !price) {
+      return res.status(400).json({ error: 'Nomi va narxi majburiy' });
+    }
+
+    const giftKey = 'gift_' + Date.now();
+    const count = await (prisma as any).liveGift.count();
+
+    const created = await (prisma as any).liveGift.create({
+      data: {
+        giftKey,
+        name: String(name).trim(),
+        icon: icon || '🎁',
+        price: Number(price),
+        description: description || null,
+        animationType: animationType || 'bounce',
+        glowColor: glowColor || 'rgba(245, 158, 11, 0.8)',
+        order: count + 1,
+        isActive: true
+      }
+    });
+
+    res.json({ gift: created });
+  } catch (err: any) {
+    console.error('Add gift error:', err);
+    res.status(500).json({ error: 'Sovg\'a qo\'shishda xatolik', detail: err?.message });
+  }
+});
+
+// 4. Admin: Update gift (edit price, name, icon, etc.)
+app.put('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { name, icon, price, description, animationType, glowColor, isActive, order } = req.body;
+
+    const updated = await (prisma as any).liveGift.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name: String(name).trim() }),
+        ...(icon !== undefined && { icon: String(icon).trim() }),
+        ...(price !== undefined && { price: Number(price) }),
+        ...(description !== undefined && { description: description ? String(description).trim() : null }),
+        ...(animationType !== undefined && { animationType: String(animationType) }),
+        ...(glowColor !== undefined && { glowColor: String(glowColor) }),
+        ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+        ...(order !== undefined && { order: Number(order) })
+      }
+    });
+
+    res.json({ gift: updated });
+  } catch (err) {
+    console.error('Update gift error:', err);
+    res.status(500).json({ error: 'Sovg\'ani yangilashda xatolik' });
+  }
+});
+
+// 5. Admin: Delete gift
+app.delete('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await (prisma as any).liveGift.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Sovg\'ani o\'chirishda xatolik' });
+  }
+});
+
+// 6. Create a donation (generates unique amount with suffix & gets active card)
 app.post('/api/live/donate/create', async (req, res) => {
   try {
     const { userId, userName, giftId, message } = req.body;
@@ -1140,7 +1271,8 @@ app.post('/api/live/donate/create', async (req, res) => {
       return res.status(400).json({ error: 'userId va giftId talab qilinadi' });
     }
 
-    const gift = DONATION_GIFTS.find(g => g.id === giftId);
+    const allGifts = await getOrSeedGifts();
+    const gift = allGifts.find((g: any) => g.id === giftId || String(g.dbId) === String(giftId));
     if (!gift) {
       return res.status(400).json({ error: 'Noto\'g\'ri sovg\'a tanlandi' });
     }

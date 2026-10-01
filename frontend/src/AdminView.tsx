@@ -63,6 +63,16 @@ export default function AdminView() {
   const [newStreamerUsername, setNewStreamerUsername] = useState('');
   const [savingStreamer, setSavingStreamer] = useState(false);
 
+  // Donation Gifts Management
+  const [adminGifts, setAdminGifts] = useState<any[]>([]);
+  const [loadingGifts, setLoadingGifts] = useState(false);
+  const [editingGift, setEditingGift] = useState<any | null>(null);
+  const [newGiftName, setNewGiftName] = useState('');
+  const [newGiftIcon, setNewGiftIcon] = useState('🎁');
+  const [newGiftPrice, setNewGiftPrice] = useState('');
+  const [newGiftAnim, setNewGiftAnim] = useState('bounce');
+  const [savingGift, setSavingGift] = useState(false);
+
   // Broadcast
   const [broadcastText, setBroadcastText] = useState('');
   const [broadcastMediaBase64, setBroadcastMediaBase64] = useState<string | null>(null);
@@ -517,8 +527,93 @@ export default function AdminView() {
     }
   };
 
+  const fetchAdminGifts = async () => {
+    setLoadingGifts(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/gifts`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminGifts(data.gifts || []);
+      }
+    } catch (e) {
+      console.error('fetchAdminGifts error:', e);
+    } finally {
+      setLoadingGifts(false);
+    }
+  };
+
+  const handleAddGift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGiftName.trim() || !newGiftPrice) return alert("Sovg'a nomi va narxi kiritilishi shart");
+    setSavingGift(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/gifts`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: newGiftName.trim(),
+          icon: newGiftIcon.trim() || '🎁',
+          price: Number(newGiftPrice),
+          animationType: newGiftAnim
+        })
+      });
+      if (res.ok) {
+        setNewGiftName('');
+        setNewGiftPrice('');
+        setNewGiftIcon('🎁');
+        fetchAdminGifts();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Xatolik yuz berdi");
+      }
+    } catch {
+      alert("Server bilan bog'lanishda xatolik");
+    } finally {
+      setSavingGift(false);
+    }
+  };
+
+  const handleUpdateGift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGift) return;
+    setSavingGift(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/gifts/${editingGift.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(editingGift)
+      });
+      if (res.ok) {
+        setEditingGift(null);
+        fetchAdminGifts();
+      } else {
+        alert("Yangilashda xatolik yuz berdi");
+      }
+    } catch {
+      alert("Server xatosi");
+    } finally {
+      setSavingGift(false);
+    }
+  };
+
+  const handleDeleteGift = async (id: number) => {
+    if (!confirm("Haqiqatan ham bu sovg'ani o'chirmoqchimisiz?")) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/gifts/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (res.ok) {
+        fetchAdminGifts();
+      }
+    } catch {
+      alert("O'chirishda xatolik");
+    }
+  };
+
   const fetchStreamersAndLive = async () => {
     try {
+      fetchAdminGifts();
       const [stRes, liveRes] = await Promise.all([
         fetch(`${API_URL}/admin/streamers`, { headers }),
         fetch(`${API_URL}/live/status`)
@@ -928,6 +1023,284 @@ export default function AdminView() {
                 </button>
               </div>
             </form>
+
+            {/* ================= DONATION GIFTS MANAGEMENT ================= */}
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#fef08a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🎁 Donat Sovg'alari va Narxlari
+                </h3>
+                <button
+                  type="button"
+                  onClick={fetchAdminGifts}
+                  className="neon-btn"
+                  style={{ padding: '4px 10px', fontSize: '11px', background: 'rgba(245, 158, 11, 0.15)', borderColor: '#f59e0b', color: '#fef08a' }}
+                >
+                  {loadingGifts ? 'Yuklanmoqda...' : 'Yangilash'}
+                </button>
+              </div>
+              <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.4', marginBottom: '16px' }}>
+                Jonli efirda foydalanuvchilar yuboradigan sovg'alar ro'yxati va ularning narxlari. Narxini o'zgartirishingiz yoki yangi sovg'a qo'shishingiz mumkin:
+              </p>
+
+              {/* Editing Gift Modal / Card */}
+              {editingGift && (
+                <form onSubmit={handleUpdateGift} className="cyber-card" style={{ padding: '16px', marginBottom: '18px', border: '1.5px solid #f59e0b', background: 'rgba(245, 158, 11, 0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#fef08a', margin: 0 }}>
+                      ✏️ Sovg'ani tahrirlash: {editingGift.name}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setEditingGift(null)}
+                      style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '14px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                      <input
+                        className="cyber-input"
+                        style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
+                        value={editingGift.icon || ''}
+                        onChange={e => setEditingGift({ ...editingGift, icon: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Nomi</label>
+                      <input
+                        className="cyber-input"
+                        style={{ width: '100%' }}
+                        value={editingGift.name || ''}
+                        onChange={e => setEditingGift({ ...editingGift, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm)</label>
+                      <input
+                        type="number"
+                        className="cyber-input"
+                        style={{ width: '100%', fontWeight: '700', color: '#fef08a' }}
+                        value={editingGift.price || ''}
+                        onChange={e => setEditingGift({ ...editingGift, price: Number(e.target.value) })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
+                      <select
+                        className="cyber-input"
+                        style={{ width: '100%', background: '#131b2e', color: '#fff' }}
+                        value={editingGift.animationType || 'bounce'}
+                        onChange={e => setEditingGift({ ...editingGift, animationType: e.target.value })}
+                      >
+                        <option value="bounce">Sakrash (Bounce)</option>
+                        <option value="sway">Chayqalish (Sway)</option>
+                        <option value="fly">Uchish (Fly)</option>
+                        <option value="spin">Aylanish (Spin)</option>
+                        <option value="pulse">Pulsatsiya (Pulse)</option>
+                        <option value="shake">Titrash (Shake)</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '18px' }}>
+                      <input
+                        type="checkbox"
+                        id="giftIsActive"
+                        checked={editingGift.isActive !== false}
+                        onChange={e => setEditingGift({ ...editingGift, isActive: e.target.checked })}
+                      />
+                      <label htmlFor="giftIsActive" style={{ fontSize: '12px', color: '#fff', cursor: 'pointer' }}>
+                        Faol (Efirda ko'rinsin)
+                      </label>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="submit"
+                      disabled={savingGift}
+                      className="neon-btn"
+                      style={{ flex: 1, padding: '9px', background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+                    >
+                      {savingGift ? 'Saqlanmoqda...' : '💾 Saqlash'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingGift(null)}
+                      className="neon-btn"
+                      style={{ padding: '9px 16px', background: 'rgba(255,255,255,0.1)' }}
+                    >
+                      Bekor qilish
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Gifts List Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', marginBottom: '18px' }}>
+                {adminGifts.map((gift: any) => (
+                  <div
+                    key={gift.id}
+                    className="cyber-card"
+                    style={{
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      border: gift.isActive === false ? '1px dashed rgba(255,255,255,0.2)' : '1px solid rgba(245, 158, 11, 0.3)',
+                      background: gift.isActive === false ? 'rgba(0,0,0,0.3)' : 'rgba(20,24,38,0.7)',
+                      opacity: gift.isActive === false ? 0.6 : 1
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '32px', lineHeight: 1 }}>{gift.icon}</span>
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '8px',
+                          fontWeight: '700',
+                          background: gift.isActive !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: gift.isActive !== false ? '#4ade80' : '#f87171'
+                        }}>
+                          {gift.isActive !== false ? 'Faol' : 'Nofaol'}
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: '800', fontSize: '13px', color: '#fff', marginBottom: '2px' }}>
+                        {gift.name}
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#fef08a', marginBottom: '4px' }}>
+                        {Number(gift.price).toLocaleString()} so'm
+                      </div>
+                      <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.5)' }}>
+                        Animatsiya: <span style={{ color: '#38bdf8' }}>{gift.animationType || 'bounce'}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditingGift(gift)}
+                        style={{
+                          flex: 1,
+                          padding: '6px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(56, 189, 248, 0.4)',
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          color: '#38bdf8',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Narx / Tahrir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGift(gift.id)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          color: '#f87171',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add New Gift Form */}
+              <form onSubmit={handleAddGift} className="cyber-card" style={{ padding: '16px' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#fef08a', marginBottom: '12px', margin: 0 }}>
+                  ➕ Yangi Sovg'a qo'shish
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                    <input
+                      className="cyber-input"
+                      style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
+                      value={newGiftIcon}
+                      onChange={e => setNewGiftIcon(e.target.value)}
+                      placeholder="🎁"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Sovg'a nomi *</label>
+                    <input
+                      className="cyber-input"
+                      style={{ width: '100%' }}
+                      placeholder="Masalan: Oltin Kubok"
+                      value={newGiftName}
+                      onChange={e => setNewGiftName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm) *</label>
+                    <input
+                      type="number"
+                      className="cyber-input"
+                      style={{ width: '100%' }}
+                      placeholder="Masalan: 75000"
+                      value={newGiftPrice}
+                      onChange={e => setNewGiftPrice(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
+                    <select
+                      className="cyber-input"
+                      style={{ width: '100%', background: '#131b2e', color: '#fff' }}
+                      value={newGiftAnim}
+                      onChange={e => setNewGiftAnim(e.target.value)}
+                    >
+                      <option value="bounce">Sakrash (Bounce)</option>
+                      <option value="sway">Chayqalish (Sway)</option>
+                      <option value="fly">Uchish (Fly)</option>
+                      <option value="spin">Aylanish (Spin)</option>
+                      <option value="pulse">Pulsatsiya (Pulse)</option>
+                      <option value="shake">Titrash (Shake)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingGift}
+                  className="neon-btn"
+                  style={{
+                    marginTop: '12px',
+                    width: '100%',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    padding: '10px',
+                    fontWeight: '800'
+                  }}
+                >
+                  {savingGift ? 'Qo\'shilmoqda...' : '➕ Yangi sovg\'ani qo\'shish'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
         {activeTab === 'stats' && (

@@ -200,3 +200,20 @@ model Streamer {
   name      String?
   addedAt   DateTime @default(now())
 }
+
+model LiveGift {
+  id            Int      @id @default(autoincrement())
+  giftKey       String   @unique
+  name          String
+  icon          String   @default("🎁")
+  price         Int      // so'mdagi narxi
+  description   String?
+  animationType String   @default("bounce") // bounce, float, pulse, spin, sway, shake, fly
+  glowColor     String   @default("#f59e0b")
+  order         Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  @@index([isActive])
+}
+

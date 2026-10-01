@@ -25,17 +25,19 @@ export interface DonationGift {
   icon: string;
   price: number;
   description: string;
+  animClass: string;
+  glowColor: string;
 }
 
 export const DONATION_GIFTS: DonationGift[] = [
-  { id: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash' },
-  { id: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat' },
-  { id: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish' },
-  { id: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish' },
-  { id: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom' },
-  { id: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat' },
-  { id: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a' },
-  { id: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat' }
+  { id: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash', animClass: 'anim-rose', glowColor: 'rgba(244, 63, 94, 0.8)' },
+  { id: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat', animClass: 'anim-coffee', glowColor: 'rgba(245, 158, 11, 0.8)' },
+  { id: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish', animClass: 'anim-chocolate', glowColor: 'rgba(180, 83, 9, 0.8)' },
+  { id: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish', animClass: 'anim-rocket', glowColor: 'rgba(56, 189, 248, 0.9)' },
+  { id: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom', animClass: 'anim-crown', glowColor: 'rgba(250, 204, 21, 0.95)' },
+  { id: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat', animClass: 'anim-car', glowColor: 'rgba(239, 68, 68, 0.9)' },
+  { id: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a', animClass: 'anim-diamond', glowColor: 'rgba(147, 197, 253, 0.95)' },
+  { id: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat', animClass: 'anim-castle', glowColor: 'rgba(245, 158, 11, 1)' }
 ];
 
 // Web Audio API Cash Chime
@@ -115,6 +117,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
 
   // Donation States
+  const [availableGifts, setAvailableGifts] = useState<DonationGift[]>(DONATION_GIFTS);
   const [showGiftsModal, setShowGiftsModal] = useState<boolean>(false);
   const [donationStep, setDonationStep] = useState<'select' | 'compose' | 'payment' | 'success'>('select');
   const [selectedGift, setSelectedGift] = useState<DonationGift | null>(null);
@@ -173,6 +176,25 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       } else if (!userId) {
         setIsStreamer(false);
       }
+
+      // Fetch dynamic donation gifts from database
+      try {
+        const giftsRes = await fetch(`${API_URL}/live/gifts`);
+        if (giftsRes.ok) {
+          const gData = await giftsRes.json();
+          if (gData.gifts && gData.gifts.length > 0) {
+            setAvailableGifts(gData.gifts.map((g: any) => ({
+              id: g.id || g.giftKey,
+              name: g.name,
+              icon: g.icon,
+              price: g.price,
+              description: g.description || '',
+              animClass: `anim-${g.animationType || 'bounce'}`,
+              glowColor: g.glowColor || 'rgba(245, 158, 11, 0.8)'
+            })));
+          }
+        }
+      } catch {}
     } catch (err) {
       console.error('Error fetching live status:', err);
     } finally {
@@ -1512,35 +1534,51 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                   Streamerga sovg'a yuboring! Sovg'angiz efirda chiqadi va xabaringiz ovoz bilan o'qiladi:
                 </p>
 
-                {/* Gifts Grid (4 columns) */}
+                {/* Gifts Grid (4 columns) with live animations */}
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(4, 1fr)',
                   gap: '8px'
                 }}>
-                  {DONATION_GIFTS.map(gift => (
+                  {availableGifts.map(gift => (
                     <div
                       key={gift.id}
                       onClick={() => handleSelectGift(gift)}
+                      className="gift-card-hover"
                       style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(245, 158, 11, 0.25)',
-                        borderRadius: '14px',
+                        background: 'radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '16px',
                         padding: '10px 4px',
                         textAlign: 'center',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
+                        transition: 'all 0.25s ease',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '4px'
+                        gap: '4px',
+                        position: 'relative'
                       }}
                     >
-                      <div style={{ fontSize: '30px', lineHeight: 1 }}>{gift.icon}</div>
+                      <div className={gift.animClass || 'anim-bounce'} style={{
+                        fontSize: '32px',
+                        lineHeight: 1,
+                        filter: `drop-shadow(0 0 10px ${gift.glowColor || 'rgba(245, 158, 11, 0.8)'})`,
+                        display: 'inline-block'
+                      }}>
+                        {gift.icon}
+                      </div>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                         {gift.name}
                       </div>
-                      <div style={{ fontSize: '10px', fontWeight: '800', color: '#f59e0b' }}>
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: '800',
+                        color: '#fef08a',
+                        background: 'rgba(245, 158, 11, 0.2)',
+                        padding: '1px 6px',
+                        borderRadius: '10px'
+                      }}>
                         {gift.price.toLocaleString()} so'm
                       </div>
                     </div>
@@ -1591,35 +1629,56 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                   </button>
                 </div>
 
-                {/* Tanlangan sovg'a ekran o'rtasiga sal kattalashib kelgan holati */}
+                {/* Tanlangan sovg'a ekran o'rtasiga kattalashib va aylanuvchi nur bilan kelgan holati */}
                 <div style={{
                   textAlign: 'center',
-                  padding: '12px',
-                  background: 'radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(0,0,0,0) 70%)',
+                  padding: '18px 12px',
+                  background: 'radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(0,0,0,0) 70%)',
                   borderRadius: '16px',
-                  marginBottom: '14px'
+                  marginBottom: '14px',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
+                  {/* Rotating Sunburst Halo Background */}
                   <div style={{
-                    fontSize: '64px',
+                    position: 'absolute',
+                    top: '40%',
+                    left: '50%',
+                    width: '160px',
+                    height: '160px',
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(254, 240, 138, 0.4) 0%, rgba(245, 158, 11, 0.1) 50%, rgba(0,0,0,0) 70%)',
+                    transform: 'translate(-50%, -50%)',
+                    animation: 'pulseGlow 2s infinite alternate',
+                    pointerEvents: 'none'
+                  }} />
+
+                  <div className={selectedGift.animClass || 'anim-bounce'} style={{
+                    fontSize: '72px',
                     lineHeight: 1,
-                    animation: 'popInGift 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                    filter: 'drop-shadow(0 0 16px rgba(245, 158, 11, 0.8))',
-                    display: 'inline-block'
+                    animation: 'bigGiftCelebration 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                    filter: `drop-shadow(0 0 20px ${selectedGift.glowColor || 'rgba(245, 158, 11, 0.9)'})`,
+                    display: 'inline-block',
+                    position: 'relative',
+                    zIndex: 2
                   }}>
                     {selectedGift.icon}
                   </div>
-                  <h4 style={{ fontSize: '17px', fontWeight: '900', color: '#fff', margin: '8px 0 2px 0' }}>
+                  <h4 style={{ fontSize: '18px', fontWeight: '900', color: '#fff', margin: '10px 0 3px 0', position: 'relative', zIndex: 2 }}>
                     {selectedGift.name}
                   </h4>
                   <div style={{
                     display: 'inline-block',
-                    background: 'rgba(245, 158, 11, 0.2)',
-                    border: '1px solid rgba(245, 158, 11, 0.6)',
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.3))',
+                    border: '1.5px solid rgba(254, 240, 138, 0.7)',
                     color: '#fef08a',
-                    fontWeight: '800',
-                    fontSize: '13px',
-                    padding: '3px 12px',
-                    borderRadius: '20px'
+                    fontWeight: '900',
+                    fontSize: '14px',
+                    padding: '3px 14px',
+                    borderRadius: '20px',
+                    boxShadow: '0 2px 10px rgba(245, 158, 11, 0.3)',
+                    position: 'relative',
+                    zIndex: 2
                   }}>
                     {selectedGift.price.toLocaleString()} so'm
                   </div>
@@ -2005,6 +2064,53 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           to {
             transform: translateY(-6px) scale(1.08);
           }
+        }
+
+        .anim-bounce { animation: animBounce 1.4s ease-in-out infinite alternate; }
+        .anim-sway { animation: animSway 2.2s ease-in-out infinite alternate; }
+        .anim-fly { animation: animFly 1.8s ease-in-out infinite alternate; }
+        .anim-spin { animation: animSpin 5s linear infinite; }
+        .anim-pulse { animation: animPulse 1.6s ease-in-out infinite; }
+        .anim-shake { animation: animShake 0.8s ease-in-out infinite; }
+
+        @keyframes animBounce {
+          0% { transform: translateY(0) scale(1); }
+          100% { transform: translateY(-8px) scale(1.1); }
+        }
+        @keyframes animSway {
+          0% { transform: rotate(-10deg) scale(1); }
+          100% { transform: rotate(10deg) scale(1.08); }
+        }
+        @keyframes animFly {
+          0% { transform: translate(0, 0) rotate(-15deg); }
+          100% { transform: translate(3px, -8px) rotate(-10deg); }
+        }
+        @keyframes animSpin {
+          0% { transform: rotate(0deg) scale(1); }
+          50% { transform: rotate(180deg) scale(1.1); }
+          100% { transform: rotate(360deg) scale(1); }
+        }
+        @keyframes animPulse {
+          0%, 100% { transform: scale(1); opacity: 0.95; }
+          50% { transform: scale(1.15); opacity: 1; }
+        }
+        @keyframes animShake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-3px) rotate(-2deg); }
+          75% { transform: translateX(3px) rotate(2deg); }
+        }
+        @keyframes bigGiftCelebration {
+          0% { transform: scale(0.3) rotate(-20deg); opacity: 0; }
+          60% { transform: scale(1.3) rotate(8deg); opacity: 1; }
+          80% { transform: scale(0.95) rotate(-3deg); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+        @keyframes pulseGlow {
+          0% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.85); }
+          100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1.15); }
+        }
+        .gift-card-hover:active {
+          transform: scale(0.94);
         }
       `}</style>
     </div>
