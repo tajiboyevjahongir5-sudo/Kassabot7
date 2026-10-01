@@ -108,34 +108,18 @@ bot.start(async (ctx) => {
       }
     );
   } else {
-    // Send persistent bottom keyboard menu (Asosiy menyu klaviaturasi)
+    // Send welcome with inline buttons only (no persistent keyboard)
     await ctx.reply(
-      `👋 *Diora Vip kanaliga xush kelibsiz!*\n\nObuna sotib olish yoki VIDEOCHAT (jonli efir)ga kirish uchun pastdagi tugmalardan foydalaning:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          keyboard: [
-            [
-              { text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: getFreshWebAppUrl(webAppUrl, 'tab=videochat') } },
-              { text: '💎 VIP Obuna', web_app: { url: getFreshWebAppUrl(webAppUrl) } }
-            ]
-          ],
-          resize_keyboard: true
-        }
-      }
-    );
-
-    // Also send prominent inline keyboard buttons
-    await ctx.reply(
-      `👇 *Asosiy sahifaga o'tish tugmalari:*`,
+      `👋 *Diora Vip kanaliga xush kelibsiz!*\n\nObuna sotib olish yoki VIDEOCHAT (jonli efir)ga kirish uchun quyidagi tugmalardan foydalaning:`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
             [{ text: '🎥 VIDEOCHAT (JONLI EFIR)', web_app: { url: getFreshWebAppUrl(webAppUrl, 'tab=videochat') } }],
             [{ text: '💎 VIP Obuna bo\'lish', web_app: { url: getFreshWebAppUrl(webAppUrl) } }]
-          ]
-        }
+          ],
+          remove_keyboard: true
+        } as any
       }
     );
   }
