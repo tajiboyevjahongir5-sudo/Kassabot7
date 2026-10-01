@@ -450,24 +450,25 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         localStreamRef.current.getTracks().forEach(t => t.stop());
       }
 
+      // Standard full-sensor dimensions so camera does not digital crop to 1x zoom
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: facing,
-          width: { ideal: 480 },
-          height: { ideal: 854 },
-          zoom: 1.0
-        } as any,
+          facingMode: { ideal: facing },
+          width: { ideal: 720 },
+          height: { ideal: 1280 }
+        },
         audio: true
       });
 
-      // Try to reset zoom to 1x if supported
+      // Try to reset zoom to 1x if supported by device
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         try {
-          const capabilities = videoTrack.getCapabilities() as any;
+          const capabilities = (videoTrack as any).getCapabilities ? (videoTrack as any).getCapabilities() : {};
           if (capabilities.zoom) {
-            await videoTrack.applyConstraints({
-              advanced: [{ zoom: capabilities.zoom.min } as any]
+            const minZoom = capabilities.zoom.min !== undefined ? capabilities.zoom.min : 1.0;
+            await (videoTrack as any).applyConstraints({
+              advanced: [{ zoom: minZoom }]
             });
           }
         } catch {}
