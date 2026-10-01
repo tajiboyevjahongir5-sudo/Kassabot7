@@ -480,7 +480,7 @@ app.get('/api/admin/settings', async (req, res) => {
 
 // Update settings
 app.post('/api/admin/settings', requireAdmin, async (req, res) => {
-  const { paymentChannelId, joinRequestChannelId, joinRequestLink, joinRequestMessage, clickP2pUrl } = req.body;
+  const { paymentChannelId, joinRequestChannelId, joinRequestLink, joinRequestMessage, clickP2pUrl, streamerId } = req.body;
   try {
     const updateData: any = {};
     if (paymentChannelId !== undefined) updateData.paymentChannelId = paymentChannelId;
@@ -488,6 +488,7 @@ app.post('/api/admin/settings', requireAdmin, async (req, res) => {
     if (joinRequestLink !== undefined) updateData.joinRequestLink = joinRequestLink;
     if (joinRequestMessage !== undefined) updateData.joinRequestMessage = joinRequestMessage;
     if (clickP2pUrl !== undefined) updateData.clickP2pUrl = clickP2pUrl;
+    if (streamerId !== undefined) updateData.streamerId = streamerId ? String(streamerId).trim() : null;
 
     const settings = await prisma.settings.upsert({
       where: { id: 1 },
@@ -780,6 +781,14 @@ async function checkIsStreamer(userId: string): Promise<boolean> {
   const adminIds = adminEnvRaw ? adminEnvRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
   if (adminIds.includes(String(userId))) return true;
 
+  try {
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (settings?.streamerId) {
+      const allowedIds = settings.streamerId.split(',').map((id: string) => id.trim()).filter(Boolean);
+      if (allowedIds.includes(String(userId))) return true;
+    }
+  } catch {}
+
   const streamer = await (prisma as any).streamer.findUnique({
     where: { userId: String(userId) }
   });
@@ -823,9 +832,12 @@ app.get('/api/live/status', async (_req, res) => {
 });
 
 // 2. Get user's live notification status and streamer permission
-app.get('/api/live/user-state/:userId', async (req, res) => {
+app.get(['/api/live/user-state', '/api/live/user-state/:userId'], async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params.userId;
+    if (!userId) {
+      return res.json({ liveNotify: false, isStreamer: false });
+    }
     const isStreamer = await checkIsStreamer(userId);
     const user = await prisma.user.findUnique({ where: { id: String(userId) } });
 

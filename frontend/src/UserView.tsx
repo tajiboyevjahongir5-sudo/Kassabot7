@@ -377,8 +377,8 @@ function UserView() {
       <main>
         {currentTab === 'videochat' ? (
           <VideoChat
-            userId={tg?.initDataUnsafe?.user?.id?.toString() || 'anon'}
-            userName={tg?.initDataUnsafe?.user?.first_name || 'Foydalanuvchi'}
+            userId={tg?.initDataUnsafe?.user?.id?.toString() || new URLSearchParams(window.location.search).get('userId') || ''}
+            userName={tg?.initDataUnsafe?.user?.first_name || new URLSearchParams(window.location.search).get('userName') || 'Foydalanuvchi'}
             onBack={() => setCurrentTab('subscription')}
           />
         ) : (

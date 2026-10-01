@@ -65,7 +65,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     try {
       const [statusRes, userStateRes] = await Promise.all([
         fetch(`${API_URL}/live/status`),
-        fetch(`${API_URL}/live/user-state/${userId}`)
+        userId ? fetch(`${API_URL}/live/user-state/${userId}`) : Promise.resolve(null as any)
       ]);
 
       if (statusRes.ok) {
@@ -80,10 +80,12 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         }
       }
 
-      if (userStateRes.ok) {
+      if (userStateRes && userStateRes.ok) {
         const uData = await userStateRes.json();
         setLiveNotify(Boolean(uData.liveNotify));
         setIsStreamer(Boolean(uData.isStreamer));
+      } else if (!userId) {
+        setIsStreamer(false);
       }
     } catch (err) {
       console.error('Error fetching live status:', err);

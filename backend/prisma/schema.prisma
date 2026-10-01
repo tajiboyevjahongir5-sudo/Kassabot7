@@ -61,6 +61,7 @@ model Settings {
   joinRequestMediaType    String? // "photo", "video", "animation" yoki null (faqat matn)
   joinRequestMediaFileId  String? // Telegram file_id
   clickP2pUrl             String? // Click P2P to'lov havolasi (masalan: https://my.click.uz/clickp2p/...)
+  streamerId              String? // Jonli efir qilish ruxsati berilgan Telegram ID raqam(lar)i (masalan: 123456789)
 }
 
 model MandatoryChannel {

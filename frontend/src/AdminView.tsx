@@ -39,7 +39,7 @@ export default function AdminView() {
   const [activeTab, setActiveTab] = useState('payments'); // payments, channels, cards, users, broadcast, stats, settings
 
   // Settings
-  const [settings, setSettings] = useState({ paymentChannelId: '', joinRequestChannelId: '', joinRequestLink: '', joinRequestMessage: '', clickP2pUrl: '' });
+  const [settings, setSettings] = useState({ paymentChannelId: '', joinRequestChannelId: '', joinRequestLink: '', joinRequestMessage: '', clickP2pUrl: '', streamerId: '' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [joinRequestsCount, setJoinRequestsCount] = useState<number>(0);
   const [approvingJoinRequests, setApprovingJoinRequests] = useState<boolean>(false);
@@ -741,6 +741,64 @@ export default function AdminView() {
               </div>
             </div>
 
+            {/* Direct Streamer ID setting */}
+            <div className="cyber-card" style={{ 
+              padding: '16px 18px', 
+              marginBottom: '20px', 
+              border: '1px solid rgba(239, 68, 68, 0.35)', 
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(20, 24, 38, 0.85) 100%)',
+              borderRadius: '14px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Video size={18} color="#f87171" />
+                <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#f87171', margin: 0 }}>
+                  Jonli efir qiluvchi foydalanuvchi Telegram ID raqami
+                </h4>
+              </div>
+              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', lineHeight: '1.4', marginBottom: '12px' }}>
+                Faqat ushbu Telegram ID egasiga <b>VIDEOCHAT</b> bo'limida kamera yoqib jonli efir boshlash tugmasi ko'rinadi. Oddiy foydalanuvchilarga bu tugma chiqmaydi (faqat tomosha qilishadi).
+              </p>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  className="cyber-input"
+                  style={{ flex: 1, fontFamily: 'monospace', fontSize: '14px', padding: '10px 14px' }}
+                  placeholder="Masalan: 123456789"
+                  value={settings.streamerId || ''}
+                  onChange={e => setSettings({...settings, streamerId: e.target.value})}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSavingSettings(true);
+                    try {
+                      const res = await fetch(`${API_URL}/admin/settings`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ streamerId: settings.streamerId })
+                      });
+                      if (res.ok) alert("Streamer ID muvaffaqiyatli saqlandi!");
+                      else alert("Xatolik yuz berdi");
+                    } catch {
+                      alert("Server xatosi");
+                    } finally {
+                      setSavingSettings(false);
+                    }
+                  }}
+                  disabled={savingSettings}
+                  className="neon-btn"
+                  style={{ 
+                    padding: '10px 20px', 
+                    fontSize: '13px', 
+                    whiteSpace: 'nowrap',
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)'
+                  }}
+                >
+                  {savingSettings ? 'Saqlanmoqda...' : <><Save size={15} style={{ display: 'inline', marginRight: '6px' }} /> Saqlash</>}
+                </button>
+              </div>
+            </div>
+
             {/* Streamers List */}
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1200,6 +1258,29 @@ export default function AdminView() {
                   onChange={e => setSettings({...settings, paymentChannelId: e.target.value})} 
                 />
                 <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Bot ushbu kanalda admin bo'lishi va kanalga kelgan to'lov haqidagi xabarlarni ko'ra olishi kerak.</p>
+              </div>
+
+              {/* Videochat Streamer Telegram ID */}
+              <div style={{ 
+                marginBottom: '18px', 
+                background: 'rgba(239, 68, 68, 0.06)', 
+                border: '1px solid rgba(239, 68, 68, 0.25)', 
+                borderRadius: '12px', 
+                padding: '16px' 
+              }}>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#f87171', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <Video size={16} /> Jonli efir qiluvchi Telegram ID (Streamer ID)
+                </label>
+                <input 
+                  className="cyber-input" 
+                  style={{ width: '100%', fontFamily: 'monospace' }} 
+                  placeholder="Masalan: 123456789" 
+                  value={settings.streamerId || ''} 
+                  onChange={e => setSettings({...settings, streamerId: e.target.value})} 
+                />
+                <p style={{ fontSize: '11.5px', opacity: 0.75, marginTop: '6px', lineHeight: '1.4' }}>
+                  🎥 Faqat ushbu Telegram ID egasiga <b>VIDEOCHAT</b> bo'limida kamera yoqib jonli efir boshlash tugmasi chiqadi. Boshqa foydalanuvchilarga bu tugma mutlaqo ko'rinmaydi.
+                </p>
               </div>
 
 
