@@ -545,14 +545,28 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
   // End Broadcasting
   const handleEndBroadcast = async () => {
-    if (!confirm('Haqiqatan ham jonli efirni tugatmoqchimisiz?')) return;
+    const isTg = typeof window !== 'undefined' && (window as any).Telegram?.WebApp;
+    if (isTg && (window as any).Telegram.WebApp.showConfirm) {
+      (window as any).Telegram.WebApp.showConfirm("Haqiqatan ham jonli efirni tugatmoqchimisiz?", async (confirmed: boolean) => {
+        if (!confirmed) return;
+        await executeEndBroadcast();
+      });
+    } else {
+      if (!confirm('Haqiqatan ham jonli efirni tugatmoqchimisiz?')) return;
+      await executeEndBroadcast();
+    }
+  };
+
+  const executeEndBroadcast = async () => {
     try {
       await fetch(`${API_URL}/live/end`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ streamId: liveStream?.id, streamerId: userId })
       });
-    } catch {}
+    } catch (e) {
+      console.error('End broadcast error:', e);
+    }
 
     stopMediaStream();
     setIsBroadcasting(false);
@@ -1084,7 +1098,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
         {/* Right Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {isBroadcasting ? (
+          {isBroadcasting && (
             <>
               {/* Flip camera */}
               <button
@@ -1103,6 +1117,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                   justifyContent: 'center',
                   cursor: 'pointer'
                 }}
+                title="Kamerani almashtirish"
               >
                 <RefreshCw size={16} />
               </button>
@@ -1124,74 +1139,83 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                   justifyContent: 'center',
                   cursor: 'pointer'
                 }}
+                title="Mikrofon"
               >
                 {micMuted ? <MicOff size={16} /> : <Mic size={16} />}
               </button>
-
-              {/* End Stream Button */}
-              <button
-                type="button"
-                onClick={handleEndBroadcast}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '20px',
-                  background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
-                  border: 'none',
-                  color: '#fff',
-                  fontWeight: '700',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 10px rgba(239,68,68,0.5)'
-                }}
-              >
-                Tugatish
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Viewer audio mute/unmute */}
-              <button
-                type="button"
-                onClick={() => setAudioMutedForViewer(!audioMutedForViewer)}
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.5)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer'
-                }}
-              >
-                {audioMutedForViewer ? <VolumeX size={16} /> : <Volume2 size={16} />}
-              </button>
-
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={onBack}
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.5)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer'
-                }}
-              >
-                <X size={18} />
-              </button>
             </>
           )}
+
+          {!isBroadcasting && (
+            /* Viewer audio mute/unmute */
+            <button
+              type="button"
+              onClick={() => setAudioMutedForViewer(!audioMutedForViewer)}
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Ovoz"
+            >
+              {audioMutedForViewer ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
+          )}
+
+          {/* End Stream Button (Har doim streamer yoki efir egasiga ko'rinadi) */}
+          {(isBroadcasting || isStreamer || (liveStream && String(liveStream.streamerId) === String(userId))) && (
+            <button
+              type="button"
+              onClick={handleEndBroadcast}
+              style={{
+                padding: '7px 14px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                border: '1.5px solid rgba(255,255,255,0.4)',
+                color: '#fff',
+                fontWeight: '800',
+                fontSize: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 12px rgba(239,68,68,0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title="Jonli efirni tugatish"
+            >
+              <span>🛑 Tugatish</span>
+            </button>
+          )}
+
+          {/* Close Button (Efirdan chiqish) */}
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            title="Chiqish"
+          >
+            <X size={18} />
+          </button>
         </div>
       </div>
 
