@@ -166,13 +166,13 @@ function UserView() {
     return () => clearInterval(liveInterval);
   }, []);
 
-  const [timeLeft, setTimeLeft] = useState<number>(180);
+  const [timeLeft, setTimeLeft] = useState<number>(1800);
 
   useEffect(() => {
     if (!activePayment) return;
 
     const createdAtTime = new Date(activePayment.createdAt).getTime();
-    const expiresAtTime = createdAtTime + 3 * 60 * 1000; // 3 minutes in ms
+    const expiresAtTime = createdAtTime + 30 * 60 * 1000; // 30 minutes in ms
 
     const updateTimer = () => {
       const now = Date.now();

@@ -262,8 +262,8 @@ app.post('/api/create-payment', async (req, res) => {
     });
 
     if (existing) {
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-      if (existing.createdAt < fifteenMinutesAgo) {
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      if (existing.createdAt < thirtyMinutesAgo) {
         await prisma.payment.update({
           where: { id: existing.id },
           data: { status: 'CANCELLED' }
