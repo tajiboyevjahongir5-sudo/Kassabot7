@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, type FormEvent } from 'react';
 import { 
   Radio, Bell, BellOff, Video, VideoOff, Mic, MicOff, 
   Send, Eye, X, RefreshCw, Heart, Sparkles, Volume2, VolumeX, ShieldAlert,
@@ -14,7 +14,7 @@ interface Comment {
 }
 
 interface FloatingHeart {
-  id: number;
+  id: string | number;
   emoji: string;
   left: number;
 }
@@ -40,52 +40,124 @@ export const DONATION_GIFTS: DonationGift[] = [
   { id: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat', animClass: 'anim-castle', glowColor: 'rgba(245, 158, 11, 1)' }
 ];
 
-// Web Audio API Cash Chime
-function playDonationChime() {
+let sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-    const tones = [1046.5, 1318.5, 1567.98];
-    tones.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.11);
-      gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.11);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.11 + 0.45);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + idx * 0.11);
-      osc.stop(ctx.currentTime + idx * 0.11 + 0.5);
-    });
+    if (!AudioContextClass) return null;
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new AudioContextClass();
+    }
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
+// Ensure AudioContext is unlocked on first user interaction anywhere
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  };
+  window.addEventListener('click', unlockAudio, { once: true });
+  window.addEventListener('touchstart', unlockAudio, { once: true });
+}
+
+// Web Audio API Cash Chime with proper AudioContext resume handling
+function playDonationChime() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const play = () => {
+      const now = ctx.currentTime;
+      // High-pitched bright cash chime chord: C6 (1046.5Hz), E6 (1318.5Hz), G6 (1567.98Hz), C7 (2093Hz)
+      const tones = [1046.5, 1318.5, 1567.98, 2093.0];
+      tones.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+        gain.gain.setValueAtTime(0.28, now + idx * 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.46);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.08);
+        osc.stop(now + idx * 0.08 + 0.49);
+      });
+    };
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(play).catch(() => {});
+    } else {
+      play();
+    }
   } catch (e) {
     console.error('Audio chime error:', e);
   }
 }
 
 // Natural Human-like Speech Synthesis (Odam o'qigandek)
-function speakDonationMessage(userName: string, amount: number, text: string) {
+function speakDonationMessage(userName: string, amount: number, text?: string) {
   if (!('speechSynthesis' in window)) return;
   try {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance();
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+    }
+
     const cleanText = text ? text.replace(/[^\p{L}\p{N}\s,!.?]/gu, '').trim() : '';
-    utterance.text = `${userName} ${amount.toLocaleString()} so'm donat qildi. ${cleanText}`;
+    const cleanUserName = (userName || 'Mehmon').trim();
+    const formattedAmount = Number(amount).toLocaleString('uz-UZ');
+    const fullText = cleanText 
+      ? `${cleanUserName} ${formattedAmount} so'm donat qildi. ${cleanText}`
+      : `${cleanUserName} ${formattedAmount} so'm donat qildi.`;
+
+    const utterance = new SpeechSynthesisUtterance(fullText);
+
+    // Detect Cyrillic (Russian) vs Latin
+    const isCyrillic = /[\u0400-\u04FF]/.test(fullText);
 
     const voices = window.speechSynthesis.getVoices();
-    const naturalVoice = voices.find(v => 
-      (v.lang.startsWith('uz') || v.lang.startsWith('ru') || v.lang.startsWith('tr')) &&
-      (v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google') || v.name.includes('Milena') || v.name.includes('Siri') || v.name.includes('Yuri'))
-    ) || voices.find(v => v.lang.startsWith('ru') || v.lang.startsWith('uz') || v.lang.startsWith('tr')) || voices[0];
+    let selectedVoice: SpeechSynthesisVoice | null = null;
 
-    if (naturalVoice) utterance.voice = naturalVoice;
-    utterance.rate = 0.92;
-    utterance.pitch = 1.05;
+    if (isCyrillic) {
+      selectedVoice = voices.find(v => v.lang.startsWith('ru') && /natural|neural|google|yandex/i.test(v.name))
+        || voices.find(v => v.lang.startsWith('ru'))
+        || null;
+      utterance.lang = 'ru-RU';
+    } else {
+      // Latin: Uzbek Latin is phonetically closest to Turkish
+      selectedVoice = voices.find(v => v.lang.startsWith('uz'))
+        || voices.find(v => v.lang.startsWith('tr') && /natural|neural|google/i.test(v.name))
+        || voices.find(v => v.lang.startsWith('tr'))
+        || voices.find(v => v.lang.startsWith('en') && /natural|neural|google/i.test(v.name))
+        || voices.find(v => v.lang.startsWith('ru'))
+        || voices[0] || null;
+      utterance.lang = selectedVoice?.lang || (voices.some(v => v.lang.startsWith('uz')) ? 'uz-UZ' : 'tr-TR');
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+
+    utterance.rate = 0.94;
+    utterance.pitch = 1.04;
     utterance.volume = 1.0;
 
+    // Small delay to let chime play cleanly first
     setTimeout(() => {
-      window.speechSynthesis.speak(utterance);
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        console.warn('Speech speak error:', e);
+      }
     }, 450);
   } catch (err) {
     console.error('Speech synthesis error:', err);
@@ -113,7 +185,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState<string>('');
   const [sendingComment, setSendingComment] = useState<boolean>(false);
-  const [viewersCount, setViewersCount] = useState<number>(1);
+  const [viewersCount, setViewersCount] = useState<number>(0);
   const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
 
   // Donation States
@@ -129,6 +201,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [copiedCard, setCopiedCard] = useState<boolean>(false);
   const [countdownSeconds, setCountdownSeconds] = useState<number>(30);
   const [currentDonationAlert, setCurrentDonationAlert] = useState<any | null>(null);
+  const [isAlertClosing, setIsAlertClosing] = useState<boolean>(false);
 
   // Streamer Live state
   const [isBroadcasting, setIsBroadcasting] = useState<boolean>(false);
@@ -137,6 +210,15 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [videoDisabled, setVideoDisabled] = useState<boolean>(false);
   const [audioMutedForViewer, setAudioMutedForViewer] = useState<boolean>(false);
   const [fallbackFrame, setFallbackFrame] = useState<string | null>(null);
+  const [isWebRtcConnected, setIsWebRtcConnected] = useState<boolean>(false);
+
+  // Viewport tracking for mobile browsers & Telegram Mini App
+  const [viewportHeight, setViewportHeight] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    }
+    return 800;
+  });
 
   // Refs
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -145,9 +227,210 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const sseRef = useRef<EventSource | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const viewerPeerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const myClientIdRef = useRef<string>('');
+  const streamerClientIdRef = useRef<string>('');
+  const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const pendingViewerCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const frameIntervalRef = useRef<any>(null);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
+  const commentsContainerRef = useRef<HTMLDivElement | null>(null);
   const countdownTimerRef = useRef<any>(null);
+  const lastReactionTimeRef = useRef<number>(0);
+  const donationQueueRef = useRef<any[]>([]);
+  const isProcessingDonationRef = useRef<boolean>(false);
+  const alertDismissTimerRef = useRef<any>(null);
+  const alertNextTimerRef = useRef<any>(null);
+
+  // Stop all media tracks, intervals, and WebRTC connections cleanly
+  const stopMediaStream = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => {
+        try { t.stop(); } catch {}
+      });
+      localStreamRef.current = null;
+    }
+    if (localVideoRef.current) {
+      try {
+        localVideoRef.current.pause();
+        localVideoRef.current.srcObject = null;
+      } catch {}
+    }
+    if (remoteVideoRef.current) {
+      try {
+        remoteVideoRef.current.pause();
+        remoteVideoRef.current.srcObject = null;
+      } catch {}
+    }
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    if (viewerPeerConnectionRef.current) {
+      try { viewerPeerConnectionRef.current.close(); } catch {}
+      viewerPeerConnectionRef.current = null;
+    }
+    peerConnectionsRef.current.forEach(pc => {
+      try { pc.close(); } catch {}
+    });
+    peerConnectionsRef.current.clear();
+    pendingCandidatesRef.current.clear();
+    pendingViewerCandidatesRef.current = [];
+    setIsWebRtcConnected(false);
+  };
+
+  // Safe Exit: completely terminates all streams, intervals, SSE, audio before navigating away
+  const handleExit = () => {
+    stopMediaStream();
+    if (sseRef.current) {
+      try { sseRef.current.close(); } catch {}
+      sseRef.current = null;
+    }
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg?.enableVerticalSwipes) {
+      try { tg.enableVerticalSwipes(); } catch {}
+    }
+    onBack();
+  };
+
+  // Viewport tracking & Telegram WebApp expansion (fixes keyboard pushing input offscreen & 100vh bugs)
+  useEffect(() => {
+    const handleViewportChange = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', handleViewportChange);
+      vv.addEventListener('scroll', handleViewportChange);
+    } else {
+      window.addEventListener('resize', handleViewportChange);
+    }
+
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg) {
+      try {
+        tg.ready?.();
+        tg.expand?.();
+        tg.disableVerticalSwipes?.();
+        if (tg.onEvent) {
+          tg.onEvent('viewportChanged', handleViewportChange);
+        }
+      } catch {}
+    }
+
+    handleViewportChange();
+
+    return () => {
+      if (vv) {
+        vv.removeEventListener('resize', handleViewportChange);
+        vv.removeEventListener('scroll', handleViewportChange);
+      } else {
+        window.removeEventListener('resize', handleViewportChange);
+      }
+      if (tg?.offEvent) {
+        try {
+          tg.offEvent('viewportChanged', handleViewportChange);
+        } catch {}
+      }
+    };
+  }, []);
+
+  // Voice preloading and voiceschanged listener
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      const onVoicesChanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+      window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+      return () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+      };
+    }
+  }, []);
+
+  // Donation alert queue processor (guarantees no collisions, 9s display with smooth 0.5s exit)
+  const processNextDonation = () => {
+    if (isProcessingDonationRef.current) return;
+    if (donationQueueRef.current.length === 0) {
+      setCurrentDonationAlert(null);
+      setIsAlertClosing(false);
+      return;
+    }
+
+    isProcessingDonationRef.current = true;
+    const nextDonation = donationQueueRef.current.shift();
+    setIsAlertClosing(false);
+    setCurrentDonationAlert(nextDonation);
+
+    // 1. Play audio chime and human-like voice
+    playDonationChime();
+    speakDonationMessage(nextDonation.userName, nextDonation.amount, nextDonation.message);
+
+    // 2. Start smooth closing after 8.5 seconds (0.5s fade out animation for total 9s)
+    if (alertDismissTimerRef.current) clearTimeout(alertDismissTimerRef.current);
+    alertDismissTimerRef.current = setTimeout(() => {
+      setIsAlertClosing(true);
+
+      // 3. Complete close at 9.0s and schedule next queued donation
+      if (alertNextTimerRef.current) clearTimeout(alertNextTimerRef.current);
+      alertNextTimerRef.current = setTimeout(() => {
+        setCurrentDonationAlert(null);
+        setIsAlertClosing(false);
+        isProcessingDonationRef.current = false;
+        // Pause 300ms between alerts for natural visual pacing
+        setTimeout(() => {
+          processNextDonation();
+        }, 300);
+      }, 500);
+    }, 8500);
+  };
+
+  const enqueueDonationAlert = (donation: any) => {
+    donationQueueRef.current.push(donation);
+    processNextDonation();
+  };
+
+  // Guaranteed resource cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      stopMediaStream();
+      if (sseRef.current) {
+        try { sseRef.current.close(); } catch {}
+        sseRef.current = null;
+      }
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      if (alertDismissTimerRef.current) {
+        clearTimeout(alertDismissTimerRef.current);
+        alertDismissTimerRef.current = null;
+      }
+      if (alertNextTimerRef.current) {
+        clearTimeout(alertNextTimerRef.current);
+        alertNextTimerRef.current = null;
+      }
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
+      const tg = (window as any).Telegram?.WebApp;
+      if (tg?.enableVerticalSwipes) {
+        try { tg.enableVerticalSwipes(); } catch {}
+      }
+    };
+  }, []);
 
   // 1. Initial Status & User Permission check
   const fetchStatusAndPermissions = async () => {
@@ -164,7 +447,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         if (sData.recentComments) {
           setComments(sData.recentComments);
         }
-        if (sData.stream?.viewersCount) {
+        if (typeof sData.stream?.viewersCount === 'number') {
           setViewersCount(sData.stream.viewersCount);
         }
       }
@@ -237,184 +520,409 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     }
   };
 
+  // Spawn floating heart locally with memory bounding (max 20 elements)
+  const spawnFloatingHeart = useCallback((emoji: string = '❤️') => {
+    const newHeart: FloatingHeart = {
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      emoji,
+      left: Math.floor(Math.random() * 50) + 20
+    };
+    setFloatingHearts(prev => [...prev.slice(-19), newHeart]);
+  }, []);
+
   // 3. Connect to SSE Events when on live stream
   useEffect(() => {
     if (!isLiveActive && !isBroadcasting) {
       if (sseRef.current) {
-        sseRef.current.close();
+        try { sseRef.current.close(); } catch {}
         sseRef.current = null;
       }
       return;
     }
 
-    const role = isBroadcasting ? 'streamer' : 'viewer';
-    const sse = new EventSource(`${API_URL}/live/events?userId=${userId}&name=${encodeURIComponent(userName)}&role=${role}`);
-    sseRef.current = sse;
+    let reconnectTimer: any = null;
+    let isMounted = true;
 
-    sse.addEventListener('init', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.viewersCount) setViewersCount(data.viewersCount);
-      } catch {}
-    });
-
-    sse.addEventListener('viewers_count', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        setViewersCount(data.count || 1);
-      } catch {}
-    });
-
-    sse.addEventListener('new_comment', (e: any) => {
-      try {
-        const comment = JSON.parse(e.data);
-        setComments(prev => [...prev.slice(-40), comment]);
-      } catch {}
-    });
-
-    sse.addEventListener('new_donation', (e: any) => {
-      try {
-        const donation = JSON.parse(e.data);
-        console.log('[LIVE DONATION RECEIVED]', donation);
-
-        // 1. Play audio chime and human-like voice
-        playDonationChime();
-        speakDonationMessage(donation.userName, donation.amount, donation.message);
-
-        // 2. Show alert banner on top center
-        setCurrentDonationAlert(donation);
-
-        // 3. Auto hide after 9 seconds
-        setTimeout(() => {
-          setCurrentDonationAlert((curr: any) => curr?.id === donation.id ? null : curr);
-        }, 9000);
-      } catch (err) {
-        console.error('new_donation event error:', err);
+    const connectSSE = () => {
+      if (!isMounted) return;
+      if (sseRef.current) {
+        try { sseRef.current.close(); } catch {}
+        sseRef.current = null;
       }
-    });
 
-    sse.addEventListener('stream_ended', () => {
-      setIsLiveActive(false);
-      setLiveStream(null);
-      setIsBroadcasting(false);
-      stopMediaStream();
-      alert('Jonli efir yakunlandi.');
-    });
+      const role = isBroadcasting ? 'streamer' : 'viewer';
+      const sse = new EventSource(`${API_URL}/live/events?userId=${userId}&name=${encodeURIComponent(userName)}&role=${role}`);
+      sseRef.current = sse;
 
-    sse.addEventListener('video_frame', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.frame) {
-          setFallbackFrame(data.frame);
+      sse.onopen = () => {
+        // SSE connected
+      };
+
+      sse.onerror = () => {
+        if (sse.readyState === EventSource.CLOSED && isMounted) {
+          try { sse.close(); } catch {}
+          sseRef.current = null;
+          if (!reconnectTimer) {
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null;
+              if (isMounted) connectSSE();
+            }, 3000);
+          }
         }
-      } catch {}
-    });
+      };
 
-    // WebRTC signaling
-    if (!isBroadcasting) {
-      // Viewer WebRTC listener
-      sse.addEventListener('webrtc_signal', async (e: any) => {
+      sse.addEventListener('ping', () => {
+        // Keep-alive heartbeat acknowledged
+      });
+
+      sse.addEventListener('init', (e: any) => {
         try {
-          const { type, data } = JSON.parse(e.data);
-          if (type === 'offer' && viewerPeerConnectionRef.current) {
-            const pc = viewerPeerConnectionRef.current;
-            await pc.setRemoteDescription(new RTCSessionDescription(data));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
+          const data = JSON.parse(e.data);
+          if (data.clientId) {
+            myClientIdRef.current = data.clientId;
+          }
+          if (typeof data.viewersCount === 'number') {
+            setViewersCount(data.viewersCount);
+          }
 
-            await fetch(`${API_URL}/live/signal`, {
+          // If viewer, notify streamer that viewer is ready to receive WebRTC stream
+          if (!isBroadcasting && data.clientId) {
+            fetch(`${API_URL}/live/signal`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ targetRole: 'streamer', senderId: userId, type: 'answer', data: answer })
-            });
-          } else if (type === 'candidate' && viewerPeerConnectionRef.current) {
-            await viewerPeerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data)).catch(() => {});
-          }
-        } catch (signalErr) {
-          console.error('WebRTC viewer signal error:', signalErr);
-        }
-      });
-    } else {
-      // Streamer WebRTC listener
-      sse.addEventListener('viewer_joined', async (e: any) => {
-        try {
-          const { clientId } = JSON.parse(e.data);
-          if (clientId && localStreamRef.current) {
-            setupStreamerPeerConnection(clientId, localStreamRef.current);
+              body: JSON.stringify({
+                targetRole: 'streamer',
+                senderId: data.clientId,
+                type: 'viewer_ready',
+                data: { userId }
+              })
+            }).catch(() => {});
           }
         } catch {}
       });
 
-      sse.addEventListener('webrtc_signal', async (e: any) => {
+      sse.addEventListener('stream_started', (e: any) => {
         try {
-          const { senderId, type, data } = JSON.parse(e.data);
-          if (type === 'answer') {
-            const pc = peerConnectionsRef.current.get(senderId);
-            if (pc) {
-              await pc.setRemoteDescription(new RTCSessionDescription(data)).catch(() => {});
-            }
-          } else if (type === 'candidate') {
-            const pc = peerConnectionsRef.current.get(senderId);
-            if (pc) {
-              await pc.addIceCandidate(new RTCIceCandidate(data)).catch(() => {});
+          const data = JSON.parse(e.data);
+          if (data.stream) {
+            setLiveStream(data.stream);
+            setIsLiveActive(true);
+            if (!isBroadcasting && myClientIdRef.current) {
+              fetch(`${API_URL}/live/signal`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  targetRole: 'streamer',
+                  senderId: myClientIdRef.current,
+                  type: 'viewer_ready',
+                  data: { userId }
+                })
+              }).catch(() => {});
             }
           }
         } catch {}
       });
-    }
+
+      sse.addEventListener('viewers_count', (e: any) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (typeof data.count === 'number') {
+            setViewersCount(data.count);
+          }
+        } catch {}
+      });
+
+      sse.addEventListener('new_comment', (e: any) => {
+        try {
+          const comment = JSON.parse(e.data);
+          setComments(prev => [...prev.slice(-40), comment]);
+        } catch {}
+      });
+
+      sse.addEventListener('new_reaction', (e: any) => {
+        try {
+          const data = JSON.parse(e.data);
+          spawnFloatingHeart(data.emoji || '❤️');
+        } catch {}
+      });
+
+      sse.addEventListener('new_donation', (e: any) => {
+        try {
+          const donation = JSON.parse(e.data);
+          console.log('[LIVE DONATION RECEIVED]', donation);
+
+          if (donationPaymentData?.donationId === donation.id && donationStep === 'payment') {
+            setDonationStep('success');
+            setCountdownSeconds(0);
+          }
+
+          enqueueDonationAlert(donation);
+        } catch (err) {
+          console.error('new_donation event error:', err);
+        }
+      });
+
+      sse.addEventListener('stream_ended', () => {
+        setIsLiveActive(false);
+        setLiveStream(null);
+        setIsBroadcasting(false);
+        stopMediaStream();
+        if ('speechSynthesis' in window) {
+          try { window.speechSynthesis.cancel(); } catch {}
+        }
+        alert('Jonli efir yakunlandi.');
+      });
+
+      sse.addEventListener('video_frame', (e: any) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.frame) {
+            setFallbackFrame(data.frame);
+          }
+        } catch {}
+      });
+
+      // WebRTC signaling
+      if (!isBroadcasting) {
+        sse.addEventListener('webrtc_signal', async (e: any) => {
+          try {
+            const { senderId, type, data } = JSON.parse(e.data);
+            if (type === 'offer') {
+              if (senderId) streamerClientIdRef.current = senderId;
+              let pc = viewerPeerConnectionRef.current;
+              if (!pc || pc.signalingState === 'closed') {
+                pc = createViewerPeerConnection();
+              }
+              await pc.setRemoteDescription(new RTCSessionDescription(data));
+
+              const queued = pendingViewerCandidatesRef.current;
+              for (const cand of queued) {
+                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+              }
+              pendingViewerCandidatesRef.current = [];
+
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+
+              await fetch(`${API_URL}/live/signal`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  targetRole: 'streamer',
+                  targetClientId: senderId,
+                  senderId: myClientIdRef.current || userId,
+                  type: 'answer',
+                  data: answer
+                })
+              });
+            } else if (type === 'candidate') {
+              const pc = viewerPeerConnectionRef.current;
+              if (pc && pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(data)).catch(() => {});
+              } else {
+                pendingViewerCandidatesRef.current.push(data);
+              }
+            }
+          } catch (signalErr) {
+            console.error('WebRTC viewer signal error:', signalErr);
+          }
+        });
+      } else {
+        sse.addEventListener('existing_viewers', (e: any) => {
+          try {
+            const { viewers } = JSON.parse(e.data);
+            if (Array.isArray(viewers) && localStreamRef.current) {
+              viewers.forEach((v: any) => {
+                if (v.clientId) {
+                  setupStreamerPeerConnection(v.clientId, localStreamRef.current!);
+                }
+              });
+            }
+          } catch {}
+        });
+
+        sse.addEventListener('viewer_joined', async (e: any) => {
+          try {
+            const { clientId } = JSON.parse(e.data);
+            if (clientId && localStreamRef.current) {
+              setupStreamerPeerConnection(clientId, localStreamRef.current);
+            }
+          } catch {}
+        });
+
+        sse.addEventListener('viewer_left', (e: any) => {
+          try {
+            const { clientId } = JSON.parse(e.data);
+            if (clientId && peerConnectionsRef.current.has(clientId)) {
+              const pc = peerConnectionsRef.current.get(clientId);
+              pc?.close();
+              peerConnectionsRef.current.delete(clientId);
+              pendingCandidatesRef.current.delete(clientId);
+            }
+          } catch {}
+        });
+
+        sse.addEventListener('webrtc_signal', async (e: any) => {
+          try {
+            const { senderId, type, data } = JSON.parse(e.data);
+            if (type === 'viewer_ready') {
+              if (senderId && localStreamRef.current) {
+                setupStreamerPeerConnection(senderId, localStreamRef.current);
+              }
+            } else if (type === 'answer') {
+              const pc = peerConnectionsRef.current.get(senderId);
+              if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data));
+                const queued = pendingCandidatesRef.current.get(senderId) || [];
+                for (const cand of queued) {
+                  await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                }
+                pendingCandidatesRef.current.delete(senderId);
+              }
+            } else if (type === 'candidate') {
+              const pc = peerConnectionsRef.current.get(senderId);
+              if (pc) {
+                if (pc.remoteDescription) {
+                  await pc.addIceCandidate(new RTCIceCandidate(data)).catch(() => {});
+                } else {
+                  const queued = pendingCandidatesRef.current.get(senderId) || [];
+                  queued.push(data);
+                  pendingCandidatesRef.current.set(senderId, queued);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Streamer signal handling error:', err);
+          }
+        });
+      }
+    };
+
+    connectSSE();
 
     return () => {
-      sse.close();
+      isMounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (sseRef.current) {
+        try { sseRef.current.close(); } catch {}
+        sseRef.current = null;
+      }
     };
-  }, [isLiveActive, isBroadcasting, userId, userName]);
+  }, [isLiveActive, isBroadcasting, userId, userName, spawnFloatingHeart]);
 
-  // Setup WebRTC for Viewer
+  // Helper to create & configure Viewer WebRTC Peer Connection
+  const createViewerPeerConnection = () => {
+    if (viewerPeerConnectionRef.current) {
+      try { viewerPeerConnectionRef.current.close(); } catch {}
+      viewerPeerConnectionRef.current = null;
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    });
+
+    viewerPeerConnectionRef.current = pc;
+
+    pc.ontrack = (event) => {
+      if (remoteVideoRef.current) {
+        const stream = event.streams[0] || new MediaStream([event.track]);
+        if (remoteVideoRef.current.srcObject !== stream) {
+          remoteVideoRef.current.srcObject = stream;
+        } else if (event.streams.length === 0 && remoteVideoRef.current.srcObject instanceof MediaStream) {
+          remoteVideoRef.current.srcObject.addTrack(event.track);
+        }
+
+        setIsWebRtcConnected(true);
+
+        const playPromise = remoteVideoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn('[Autoplay with audio blocked by browser]:', err);
+            // Autoplay policy fallback: mute and play
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.muted = true;
+              setAudioMutedForViewer(true);
+              remoteVideoRef.current.play().catch(e => console.error('[Muted play failed]:', e));
+            }
+          });
+        }
+      }
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        fetch(`${API_URL}/live/signal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetRole: 'streamer',
+            targetClientId: streamerClientIdRef.current,
+            senderId: myClientIdRef.current || userId,
+            type: 'candidate',
+            data: event.candidate
+          })
+        }).catch(() => {});
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') {
+        setIsWebRtcConnected(true);
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        setIsWebRtcConnected(false);
+      }
+    };
+
+    return pc;
+  };
+
+  // Setup WebRTC for Viewer when entering live stream
   useEffect(() => {
     if (isLiveActive && !isBroadcasting) {
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      });
-
-      viewerPeerConnectionRef.current = pc;
-
-      pc.ontrack = (event) => {
-        if (remoteVideoRef.current && event.streams[0]) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-          remoteVideoRef.current.play().catch(() => {});
-        }
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          fetch(`${API_URL}/live/signal`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetRole: 'streamer', senderId: userId, type: 'candidate', data: event.candidate })
-          }).catch(() => {});
-        }
-      };
+      createViewerPeerConnection();
 
       return () => {
-        pc.close();
-        viewerPeerConnectionRef.current = null;
+        if (viewerPeerConnectionRef.current) {
+          try { viewerPeerConnectionRef.current.close(); } catch {}
+          viewerPeerConnectionRef.current = null;
+        }
+        setIsWebRtcConnected(false);
       };
     }
-  }, [isLiveActive, isBroadcasting, userId]);
+  }, [isLiveActive, isBroadcasting]);
 
   // Setup WebRTC connection for Streamer towards a specific viewer
   const setupStreamerPeerConnection = async (viewerClientId: string, stream: MediaStream) => {
     try {
+      const existing = peerConnectionsRef.current.get(viewerClientId);
+      if (existing && existing.connectionState !== 'closed' && existing.connectionState !== 'failed') {
+        return;
+      }
+      if (existing) {
+        try { existing.close(); } catch {}
+      }
+
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
         ]
       });
 
       peerConnectionsRef.current.set(viewerClientId, pc);
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'closed' || pc.connectionState === 'failed') {
+          try { pc.close(); } catch {}
+          peerConnectionsRef.current.delete(viewerClientId);
+          pendingCandidatesRef.current.delete(viewerClientId);
+        }
+      };
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
@@ -425,51 +933,88 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           fetch(`${API_URL}/live/signal`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetClientId: viewerClientId, senderId: userId, type: 'candidate', data: event.candidate })
+            body: JSON.stringify({
+              targetClientId: viewerClientId,
+              senderId: myClientIdRef.current || userId,
+              type: 'candidate',
+              data: event.candidate
+            })
           }).catch(() => {});
         }
       };
 
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: false,
+        offerToReceiveVideo: false
+      });
       await pc.setLocalDescription(offer);
 
       await fetch(`${API_URL}/live/signal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetClientId: viewerClientId, senderId: userId, type: 'offer', data: offer })
+        body: JSON.stringify({
+          targetClientId: viewerClientId,
+          senderId: myClientIdRef.current || userId,
+          type: 'offer',
+          data: offer
+        })
       });
     } catch (err) {
       console.error('Error setting up streamer peer connection:', err);
     }
   };
 
-  // Helper: Start Camera
+  // Helper: Start Camera with full-sensor framing and resilient audio/video fallback
   const startCamera = async (facing: 'user' | 'environment') => {
     try {
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(t => t.stop());
+        localStreamRef.current.getTracks().forEach(t => {
+          try { t.stop(); } catch {}
+        });
+        localStreamRef.current = null;
       }
 
-      // Standard full-sensor dimensions so camera does not digital crop to 1x zoom
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facing },
-          width: { ideal: 720 },
-          height: { ideal: 1280 }
-        },
-        audio: true
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 720, max: 1080 },
+            height: { ideal: 1280, max: 1920 },
+            aspectRatio: { ideal: 9 / 16 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (audioVideoErr) {
+        console.warn('Could not get audio+video, falling back to video only:', audioVideoErr);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 720, max: 1080 },
+            height: { ideal: 1280, max: 1920 },
+            aspectRatio: { ideal: 9 / 16 }
+          },
+          audio: false
+        });
+      }
 
-      // Try to reset zoom to 1x if supported by device
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         try {
+          const settings = videoTrack.getSettings ? videoTrack.getSettings() : {};
+          if (settings.facingMode) {
+            setCameraFacing(settings.facingMode as 'user' | 'environment');
+          }
           const capabilities = (videoTrack as any).getCapabilities ? (videoTrack as any).getCapabilities() : {};
           if (capabilities.zoom) {
             const minZoom = capabilities.zoom.min !== undefined ? capabilities.zoom.min : 1.0;
             await (videoTrack as any).applyConstraints({
               advanced: [{ zoom: minZoom }]
-            });
+            }).catch(() => {});
           }
         } catch {}
       }
@@ -485,19 +1030,6 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       alert('Kamera yoki mikrofondan foydalanishga ruxsat berilmadi.');
       return null;
     }
-  };
-
-  const stopMediaStream = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(t => t.stop());
-      localStreamRef.current = null;
-    }
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
-    peerConnectionsRef.current.forEach(pc => pc.close());
-    peerConnectionsRef.current.clear();
   };
 
   // Start Broadcasting
@@ -529,7 +1061,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         const ctx = canvas.getContext('2d');
 
         frameIntervalRef.current = setInterval(() => {
-          if (localVideoRef.current && ctx) {
+          if (localVideoRef.current && localVideoRef.current.readyState >= 2 && localVideoRef.current.videoWidth > 0 && ctx) {
             try {
               ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
               const frame = canvas.toDataURL('image/jpeg', 0.5);
@@ -578,37 +1110,94 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     }
 
     stopMediaStream();
+    if (sseRef.current) {
+      try { sseRef.current.close(); } catch {}
+      sseRef.current = null;
+    }
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
     setIsBroadcasting(false);
     setIsLiveActive(false);
     setLiveStream(null);
   };
 
-  // Flip Camera
+  // Flip Camera: smoothly switches video track without disrupting audio track or peer connections
   const handleFlipCamera = async () => {
     const nextFacing = cameraFacing === 'user' ? 'environment' : 'user';
     setCameraFacing(nextFacing);
-    if (isBroadcasting) {
-      const stream = await startCamera(nextFacing);
-      if (stream) {
-        // Replace tracks in all peer connections
-        const videoTrack = stream.getVideoTracks()[0];
-        peerConnectionsRef.current.forEach(pc => {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender && videoTrack) {
-            sender.replaceTrack(videoTrack).catch(() => {});
-          }
-        });
+
+    if (!localStreamRef.current) return;
+
+    try {
+      // 1. Get new video track only
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: nextFacing },
+          width: { ideal: 720, max: 1080 },
+          height: { ideal: 1280, max: 1920 },
+          aspectRatio: { ideal: 9 / 16 }
+        }
+      });
+
+      const newVideoTrack = newVideoStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      // Apply zoom reset if supported
+      try {
+        const capabilities = (newVideoTrack as any).getCapabilities ? (newVideoTrack as any).getCapabilities() : {};
+        if (capabilities.zoom) {
+          const minZoom = capabilities.zoom.min !== undefined ? capabilities.zoom.min : 1.0;
+          await (newVideoTrack as any).applyConstraints({ advanced: [{ zoom: minZoom }] }).catch(() => {});
+        }
+      } catch {}
+
+      // 2. Stop old video track(s) only - DO NOT touch audio track!
+      const oldVideoTracks = localStreamRef.current.getVideoTracks();
+      oldVideoTracks.forEach(t => {
+        localStreamRef.current?.removeTrack(t);
+        try { t.stop(); } catch {}
+      });
+
+      // 3. Add new video track to localStream
+      localStreamRef.current.addTrack(newVideoTrack);
+
+      // 4. Update local video preview
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
       }
+
+      // 5. Seamlessly replace video track in all active peer connections
+      peerConnectionsRef.current.forEach((pc, clientId) => {
+        try {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video' || (s as any).kind === 'video');
+          if (sender) {
+            sender.replaceTrack(newVideoTrack).catch(err => {
+              console.warn(`replaceTrack failed for client ${clientId}:`, err);
+            });
+          }
+        } catch (e) {
+          console.warn(`Error replacing track for client ${clientId}:`, e);
+        }
+      });
+    } catch (err) {
+      console.error('Flip camera error:', err);
     }
   };
 
   // Toggle Mic
   const handleToggleMic = () => {
     if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setMicMuted(!audioTrack.enabled);
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const nextState = !audioTracks[0].enabled;
+        audioTracks.forEach(t => { t.enabled = nextState; });
+        setMicMuted(!nextState);
       }
     }
   };
@@ -616,25 +1205,44 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   // Toggle Video Pause
   const handleToggleVideo = () => {
     if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setVideoDisabled(!videoTrack.enabled);
+      const videoTracks = localStreamRef.current.getVideoTracks();
+      if (videoTracks.length > 0) {
+        const nextState = !videoTracks[0].enabled;
+        videoTracks.forEach(t => { t.enabled = nextState; });
+        setVideoDisabled(!nextState);
       }
     }
   };
 
-  // Post comment
+  // Toggle Viewer Audio with Autoplay resume
+  const handleToggleViewerAudio = () => {
+    const nextState = !audioMutedForViewer;
+    setAudioMutedForViewer(nextState);
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = nextState;
+      if (!nextState) {
+        remoteVideoRef.current.play().catch(e => console.error('Unmute play error:', e));
+      }
+    }
+  };
+
+  // Post comment with error recovery, trimming, and length limits
   const handleSendComment = async (e?: FormEvent) => {
     if (e) e.preventDefault();
-    if (!newComment.trim() || sendingComment) return;
+    const commentToSend = newComment.trim();
+    if (!commentToSend || sendingComment) return;
+
+    if (commentToSend.length > 200) {
+      alert("Sharh 200 ta belgidan oshmasligi kerak");
+      return;
+    }
 
     setSendingComment(true);
-    const commentToSend = newComment.trim();
+    // Optimistically clear input
     setNewComment('');
 
     try {
-      await fetch(`${API_URL}/live/comment`, {
+      const res = await fetch(`${API_URL}/live/comment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -644,42 +1252,47 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           text: commentToSend
         })
       });
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
     } catch (err) {
       console.error('Send comment error:', err);
+      // Xatolik yuz berganda xabarni yo'qotmaslik (inputga qaytarib qo'yish)
+      setNewComment(commentToSend);
     } finally {
       setSendingComment(false);
     }
   };
 
-  // Trigger floating heart reaction
+  // Trigger floating heart reaction with burst UI and throttled network broadcast
   const handleSendReaction = (emoji: string = '❤️') => {
-    const newHeart: FloatingHeart = {
-      id: Date.now() + Math.random(),
-      emoji,
-      left: Math.floor(Math.random() * 50) + 20
-    };
-    setFloatingHearts(prev => [...prev.slice(-15), newHeart]);
-    setTimeout(() => {
-      setFloatingHearts(prev => prev.filter(h => h.id !== newHeart.id));
-    }, 2200);
+    // 1. Instantly spawn visual floating heart on sender screen
+    spawnFloatingHeart(emoji);
 
-    // Also send reaction as quick chat emoji
-    fetch(`${API_URL}/live/comment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        streamId: liveStream?.id,
-        userId,
-        userName,
-        text: emoji
-      })
-    }).catch(() => {});
+    // 2. Throttle network broadcast to once every 700ms so rapid clicking doesn't flood backend
+    const now = Date.now();
+    if (now - lastReactionTimeRef.current > 700) {
+      lastReactionTimeRef.current = now;
+      fetch(`${API_URL}/live/reaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          streamId: liveStream?.id,
+          emoji
+        })
+      }).catch(() => {});
+    }
   };
 
-  // Auto-scroll comments to bottom
+  // Auto-scroll comments inside container smoothly without viewport jump
   useEffect(() => {
+    if (commentsContainerRef.current) {
+      commentsContainerRef.current.scrollTop = commentsContainerRef.current.scrollHeight;
+    }
     if (commentsEndRef.current) {
-      commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      try {
+        commentsEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch {}
     }
   }, [comments]);
 
@@ -732,7 +1345,8 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       const data = await res.json();
       if (data.success) {
         setDonationStep('success');
-        setCountdownSeconds(30);
+        const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 30;
+        setCountdownSeconds(remaining);
         if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
         countdownTimerRef.current = setInterval(() => {
           setCountdownSeconds(prev => {
@@ -752,6 +1366,40 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       setCheckingDonation(false);
     }
   };
+
+  // Auto-poll donation status while user is on payment screen (window stays open and automatically transitions when paid)
+  useEffect(() => {
+    if (!showGiftsModal || donationStep !== 'payment' || !donationPaymentData?.donationId) {
+      return;
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/live/donate/check/${donationPaymentData.donationId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          setDonationStep('success');
+          const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 30;
+          setCountdownSeconds(remaining);
+          if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = setInterval(() => {
+            setCountdownSeconds(prev => {
+              if (prev <= 1) {
+                clearInterval(countdownTimerRef.current);
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [showGiftsModal, donationStep, donationPaymentData?.donationId]);
 
   const handleCopyCard = (num: string) => {
     if (!num) return;
@@ -791,19 +1439,20 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         <div style={{ marginBottom: '14px' }}>
           <button
             type="button"
-            onClick={onBack}
+            onClick={handleExit}
             style={{
               background: 'rgba(255, 255, 255, 0.08)',
               border: '1px solid rgba(255, 255, 255, 0.15)',
               borderRadius: '10px',
-              padding: '8px 14px',
+              padding: '10px 16px',
               color: '#fff',
-              fontSize: '13px',
+              fontSize: '13.5px',
               fontWeight: '600',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              touchAction: 'manipulation'
             }}
           >
             ← Asosiy sahifaga qaytish
@@ -960,8 +1609,9 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       position: 'fixed',
       top: 0,
       left: 0,
-      right: 0,
-      bottom: 0,
+      width: '100vw',
+      height: typeof viewportHeight === 'number' ? `${viewportHeight}px` : '100dvh',
+      maxHeight: typeof viewportHeight === 'number' ? `${viewportHeight}px` : '100dvh',
       zIndex: 99999,
       background: '#000000',
       overflow: 'hidden',
@@ -988,6 +1638,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             width: '100%',
             height: '100%',
             objectFit: 'cover',
+            objectPosition: 'center',
             transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none'
           }}
         />
@@ -998,16 +1649,19 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             autoPlay
             playsInline
             muted={audioMutedForViewer}
+            onPlaying={() => setIsWebRtcConnected(true)}
             style={{
               position: 'absolute',
               top: 0,
               left: 0,
               width: '100%',
               height: '100%',
-              objectFit: 'cover'
+              objectFit: 'cover',
+              objectPosition: 'center',
+              zIndex: 1
             }}
           />
-          {/* Fallback frame canvas poster if WebRTC stream is buffering */}
+          {/* Fallback frame canvas poster if WebRTC stream is buffering or failed */}
           {fallbackFrame && (
             <img
               src={fallbackFrame}
@@ -1019,10 +1673,43 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                opacity: remoteVideoRef.current?.srcObject ? 0 : 1,
+                objectPosition: 'center',
+                zIndex: isWebRtcConnected ? 0 : 2,
+                opacity: isWebRtcConnected ? 0 : 1,
+                pointerEvents: isWebRtcConnected ? 'none' : 'auto',
                 transition: 'opacity 0.3s ease'
               }}
             />
+          )}
+
+          {/* Autoplay muted notice indicator */}
+          {!isBroadcasting && audioMutedForViewer && (
+            <div
+              onClick={handleToggleViewerAudio}
+              style={{
+                position: 'absolute',
+                top: '72px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 30,
+                background: 'rgba(0, 0, 0, 0.75)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                borderRadius: '24px',
+                padding: '7px 15px',
+                color: '#fff',
+                fontSize: '12px',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
+              }}
+            >
+              <VolumeX size={15} color="#f87171" />
+              <span>Ovoz o'chiq. Yoqish uchun bosing</span>
+            </div>
           )}
         </>
       )}
@@ -1055,15 +1742,16 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       <div style={{
         position: 'relative',
         zIndex: 20,
-        padding: '16px',
+        padding: 'calc(10px + env(safe-area-inset-top, 0px)) 12px 10px 12px',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        gap: '8px'
       }}>
         {/* Streamer Badge & Live indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
           <div style={{
-            background: 'rgba(239, 68, 68, 0.9)',
+            background: 'rgba(239, 68, 68, 0.95)',
             color: '#fff',
             fontWeight: '900',
             fontSize: '11px',
@@ -1072,10 +1760,28 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             display: 'flex',
             alignItems: 'center',
             gap: '4px',
-            boxShadow: '0 0 10px rgba(239, 68, 68, 0.6)'
+            boxShadow: '0 0 10px rgba(239, 68, 68, 0.6)',
+            flexShrink: 0
           }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff', animation: 'pulse 1s infinite' }} />
             JONLI
+          </div>
+
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(8px)',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: '700',
+            padding: '4px 9px',
+            borderRadius: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            flexShrink: 0
+          }}>
+            <Eye size={13} color="#38bdf8" />
+            <span>{viewersCount}</span>
           </div>
 
           <div style={{
@@ -1083,26 +1789,10 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             backdropFilter: 'blur(8px)',
             color: '#fff',
             fontSize: '12px',
-            fontWeight: '700',
-            padding: '4px 10px',
-            borderRadius: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px'
-          }}>
-            <Eye size={13} color="#38bdf8" />
-            <span>{viewersCount}</span>
-          </div>
-
-          <div style={{
-            background: 'rgba(0, 0, 0, 0.45)',
-            backdropFilter: 'blur(8px)',
-            color: '#fff',
-            fontSize: '12px',
             fontWeight: '600',
-            padding: '4px 10px',
+            padding: '4px 9px',
             borderRadius: '20px',
-            maxWidth: '120px',
+            maxWidth: '110px',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap'
@@ -1112,7 +1802,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         </div>
 
         {/* Right Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           {isBroadcasting && (
             <>
               {/* Flip camera */}
@@ -1120,21 +1810,23 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                 type="button"
                 onClick={handleFlipCamera}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.5)',
+                  background: 'rgba(0,0,0,0.6)',
                   backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '1.5px solid rgba(255,255,255,0.25)',
                   color: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  touchAction: 'manipulation'
                 }}
                 title="Kamerani almashtirish"
+                aria-label="Kamerani almashtirish"
               >
-                <RefreshCw size={16} />
+                <RefreshCw size={17} />
               </button>
 
               {/* Mic toggle */}
@@ -1142,21 +1834,23 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                 type="button"
                 onClick={handleToggleMic}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '50%',
-                  background: micMuted ? 'rgba(239,68,68,0.7)' : 'rgba(0,0,0,0.5)',
+                  background: micMuted ? 'rgba(239,68,68,0.85)' : 'rgba(0,0,0,0.6)',
                   backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '1.5px solid rgba(255,255,255,0.25)',
                   color: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  touchAction: 'manipulation'
                 }}
                 title="Mikrofon"
+                aria-label="Mikrofon"
               >
-                {micMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                {micMuted ? <MicOff size={17} /> : <Mic size={17} />}
               </button>
             </>
           )}
@@ -1165,23 +1859,25 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             /* Viewer audio mute/unmute */
             <button
               type="button"
-              onClick={() => setAudioMutedForViewer(!audioMutedForViewer)}
+              onClick={handleToggleViewerAudio}
               style={{
-                width: '36px',
-                height: '36px',
+                width: '38px',
+                height: '38px',
                 borderRadius: '50%',
-                background: 'rgba(0,0,0,0.5)',
+                background: 'rgba(0,0,0,0.6)',
                 backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: '1.5px solid rgba(255,255,255,0.25)',
                 color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                touchAction: 'manipulation'
               }}
               title="Ovoz"
+              aria-label="Ovoz"
             >
-              {audioMutedForViewer ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              {audioMutedForViewer ? <VolumeX size={17} /> : <Volume2 size={17} />}
             </button>
           )}
 
@@ -1191,8 +1887,9 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
               type="button"
               onClick={handleEndBroadcast}
               style={{
-                padding: '7px 14px',
-                borderRadius: '20px',
+                height: '38px',
+                padding: '0 14px',
+                borderRadius: '19px',
                 background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
                 border: '1.5px solid rgba(255,255,255,0.4)',
                 color: '#fff',
@@ -1202,7 +1899,9 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                 boxShadow: '0 2px 12px rgba(239,68,68,0.6)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px'
+                gap: '5px',
+                touchAction: 'manipulation',
+                flexShrink: 0
               }}
               title="Jonli efirni tugatish"
             >
@@ -1213,23 +1912,26 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           {/* Close Button (Efirdan chiqish) */}
           <button
             type="button"
-            onClick={onBack}
+            onClick={handleExit}
             style={{
-              width: '36px',
-              height: '36px',
+              width: '38px',
+              height: '38px',
               borderRadius: '50%',
-              background: 'rgba(0,0,0,0.5)',
+              background: 'rgba(0,0,0,0.6)',
               backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.2)',
+              border: '1.5px solid rgba(255,255,255,0.25)',
               color: '#fff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+              flexShrink: 0
             }}
             title="Chiqish"
+            aria-label="Chiqish"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
       </div>
@@ -1252,8 +1954,9 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           boxShadow: '0 10px 30px rgba(245, 158, 11, 0.6), 0 0 25px rgba(254, 240, 138, 0.5)',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          animation: 'donationBannerIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+          animation: isAlertClosing 
+            ? 'donationBannerOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards' 
+            : 'donationBannerIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
           pointerEvents: 'none'
         }}>
           <div style={{
@@ -1305,154 +2008,170 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       {/* Spacer to push comments to bottom */}
       <div style={{ flex: 1 }} />
 
-      {/* 3. Floating Comments Layer (TikTok Live Style — 4 visible + 1 fading) */}
-      <div style={{
-        position: 'absolute',
-        bottom: '80px',
-        left: '12px',
-        right: '72px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'flex-end',
-        zIndex: 30,
-        pointerEvents: 'none',
-      }}>
-        {comments.slice(-5).map((c, i, arr) => {
-          const isOldest = i === 0 && arr.length === 5;
-          return (
-            <div
-              key={c.id || i}
-              style={{
-                background: 'rgba(0, 0, 0, 0.5)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '6px 12px',
-                marginBottom: '6px',
-                maxWidth: '92%',
-                alignSelf: 'flex-start',
-                animation: isOldest ? 'fadeOutComment 0.5s ease forwards' : 'slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                opacity: isOldest ? 0.3 : 1,
-                transition: 'opacity 0.4s ease',
-              }}
-            >
-              <span style={{ 
-                fontWeight: '700', 
-                fontSize: '12px', 
-                color: c.userId === String(liveStream?.streamerId) ? '#fbbf24' : '#38bdf8', 
-                marginRight: '6px' 
-              }}>
-                {c.userName}:
-              </span>
-              <span style={{ fontSize: '13px', color: '#ffffff', wordBreak: 'break-word' }}>
-                {c.text}
-              </span>
-            </div>
-          );
-        })}
-        <div ref={commentsEndRef} />
-      </div>
-
-      {/* 4. Floating Reactions (Hearts floating upwards on right) */}
-      <div style={{
-        position: 'absolute',
-        bottom: '90px',
-        right: '16px',
-        width: '50px',
-        height: '240px',
-        pointerEvents: 'none',
-        zIndex: 35,
-        overflow: 'hidden'
-      }}>
-        {floatingHearts.map(h => (
-          <div
-            key={h.id}
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: `${h.left}%`,
-              fontSize: '24px',
-              animation: 'floatUp 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards'
-            }}
-          >
-            {h.emoji}
-          </div>
-        ))}
-      </div>
-
-      {/* 4.5 Floating Action Buttons (Donat & Yurakcha — input ustida, o'ng tarafda teparoqda) */}
-      <div style={{
-        position: 'absolute',
-        bottom: '76px',
-        right: '12px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '10px',
-        zIndex: 45
-      }}>
-        {/* DONAT BUTTON */}
-        <button
-          type="button"
-          onClick={() => {
-            setShowGiftsModal(true);
-            setDonationStep('select');
-          }}
-          style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-            border: '2px solid rgba(254, 240, 138, 0.9)',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 18px rgba(245, 158, 11, 0.7), 0 0 14px rgba(254, 240, 138, 0.5)',
-            animation: 'pulseDonat 2s infinite',
-            gap: '1px'
-          }}
-          title="Donat qilish"
-        >
-          <Gift size={20} />
-          <span style={{ fontSize: '8px', fontWeight: '900', letterSpacing: '0.3px' }}>
-            DONAT
-          </span>
-        </button>
-
-        {/* Floating Heart / Like Button */}
-        <button
-          type="button"
-          onClick={() => handleSendReaction('❤️')}
-          style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
-            border: '2px solid rgba(255, 255, 255, 0.3)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 16px rgba(239, 68, 68, 0.6)'
-          }}
-          title="Yurakcha yuborish"
-        >
-          <Heart size={22} fill="#fff" />
-        </button>
-      </div>
-
-      {/* 5. Bottom Comment Input Bar (O'ng tarafga to'liq cho'zilgan) */}
+      {/* 3. Bottom Controls & Comment Input Bar */}
       <div style={{
         position: 'relative',
         zIndex: 40,
-        padding: '10px 14px 14px 14px',
+        padding: '6px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px',
         width: '100%',
         boxSizing: 'border-box'
       }}>
+        {/* Floating Action Buttons: Placed directly above the input on the right side */}
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 8px)',
+          right: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '10px',
+          zIndex: 45
+        }}>
+          {/* DONAT BUTTON */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowGiftsModal(true);
+              setDonationStep('select');
+            }}
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              border: '2px solid rgba(254, 240, 138, 0.9)',
+              color: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 18px rgba(245, 158, 11, 0.7), 0 0 14px rgba(254, 240, 138, 0.5)',
+              animation: 'pulseDonat 2s infinite',
+              gap: '1px',
+              touchAction: 'manipulation'
+            }}
+            title="Donat qilish"
+            aria-label="Donat qilish"
+          >
+            <Gift size={20} />
+            <span style={{ fontSize: '8px', fontWeight: '900', letterSpacing: '0.3px' }}>
+              DONAT
+            </span>
+          </button>
+
+          {/* Floating Heart / Like Button */}
+          <button
+            type="button"
+            onClick={() => handleSendReaction('❤️')}
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
+              border: '2px solid rgba(255, 255, 255, 0.3)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(239, 68, 68, 0.6)',
+              touchAction: 'manipulation'
+            }}
+            title="Yurakcha yuborish"
+            aria-label="Yurakcha yuborish"
+          >
+            <Heart size={22} fill="#fff" />
+          </button>
+        </div>
+
+        {/* Floating Reactions (Hearts floating upwards right above like button) */}
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 10px)',
+          right: '12px',
+          width: '50px',
+          height: '240px',
+          pointerEvents: 'none',
+          zIndex: 35,
+          overflow: 'hidden'
+        }}>
+          {floatingHearts.map(h => (
+            <div
+              key={h.id}
+              onAnimationEnd={() => {
+                setFloatingHearts(prev => prev.filter(item => item.id !== h.id));
+              }}
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: `${h.left}%`,
+                fontSize: '24px',
+                animation: 'floatUp 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards',
+                willChange: 'transform, opacity'
+              }}
+            >
+              {h.emoji}
+            </div>
+          ))}
+        </div>
+
+        {/* Floating Comments Layer: Placed above bottom bar, on the left, not overlapping the right buttons */}
+        <div 
+          ref={commentsContainerRef}
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: '12px',
+            right: '74px',
+            maxHeight: '220px',
+            overflowY: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            zIndex: 30,
+            pointerEvents: 'none',
+            WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%)',
+            maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%)'
+          }}
+        >
+          {comments.slice(-5).map((c, i, arr) => {
+            const isOldest = i === 0 && arr.length === 5;
+            return (
+              <div
+                key={c.id ? `live-c-${c.id}` : `live-c-${c.createdAt || i}`}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.55)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '16px',
+                  padding: '6px 12px',
+                  marginBottom: '6px',
+                  maxWidth: '100%',
+                  alignSelf: 'flex-start',
+                  animation: isOldest ? 'fadeOutComment 0.6s ease forwards' : 'slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  opacity: isOldest ? 0.35 : 1,
+                  transition: 'opacity 0.4s ease',
+                }}
+              >
+                <span style={{ 
+                  fontWeight: '700', 
+                  fontSize: '12px', 
+                  color: c.userId === String(liveStream?.streamerId) ? '#fbbf24' : '#38bdf8', 
+                  marginRight: '6px' 
+                }}>
+                  {c.userName}:
+                </span>
+                <span style={{ fontSize: '13px', color: '#ffffff', wordBreak: 'break-word' }}>
+                  {c.text}
+                </span>
+              </div>
+            );
+          })}
+          <div ref={commentsEndRef} />
+        </div>
+
+        {/* Comment Input Form (Stretches 100% across the bottom) */}
         <form 
           onSubmit={handleSendComment} 
           style={{ width: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}
@@ -1461,16 +2180,17 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             type="text"
             placeholder="Sharh qoldiring..."
             value={newComment}
+            maxLength={200}
             onChange={e => setNewComment(e.target.value)}
             style={{
               width: '100%',
-              background: 'rgba(255, 255, 255, 0.16)',
+              background: 'rgba(255, 255, 255, 0.18)',
               backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.28)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
               borderRadius: '24px',
-              padding: '12px 50px 12px 18px',
+              padding: '12px 48px 12px 16px',
               color: '#fff',
-              fontSize: '14px',
+              fontSize: '16px',
               outline: 'none',
               boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
               boxSizing: 'border-box'
@@ -1485,15 +2205,17 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
               width: '36px',
               height: '36px',
               borderRadius: '50%',
-              background: newComment.trim() ? '#38bdf8' : 'rgba(255,255,255,0.12)',
+              background: newComment.trim() ? '#38bdf8' : 'rgba(255,255,255,0.15)',
               border: 'none',
               color: '#fff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: newComment.trim() ? 'pointer' : 'default',
-              transition: 'background 0.2s ease'
+              transition: 'background 0.2s ease',
+              touchAction: 'manipulation'
             }}
+            aria-label="Yuborish"
           >
             <Send size={16} />
           </button>
@@ -1505,7 +2227,11 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         <>
           {/* Translucent backdrop (jonli efir orqa fonda ko'rinib turadi) */}
           <div 
-            onClick={handleCloseDonationModal}
+            onClick={() => {
+              if (donationStep !== 'payment') {
+                handleCloseDonationModal();
+              }
+            }}
             style={{
               position: 'fixed',
               top: 0,
@@ -1524,24 +2250,35 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             bottom: 0,
             left: 0,
             right: 0,
-            maxHeight: '75vh',
+            maxHeight: typeof viewportHeight === 'number' ? `${Math.min(viewportHeight * 0.85, 580)}px` : '80dvh',
             background: 'linear-gradient(180deg, #131b2e 0%, #0b0f19 100%)',
             borderTop: '2px solid rgba(245, 158, 11, 0.5)',
             borderRadius: '24px 24px 0 0',
             zIndex: 100001,
             overflowY: 'auto',
-            padding: '18px 16px 24px 16px',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+            padding: '16px 16px calc(24px + env(safe-area-inset-bottom, 0px)) 16px',
             boxShadow: '0 -10px 40px rgba(0,0,0,0.8), 0 0 30px rgba(245, 158, 11, 0.2)',
             animation: 'slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
           }}>
             {/* Grab Handle */}
-            <div style={{
-              width: '40px',
-              height: '4px',
-              borderRadius: '2px',
-              background: 'rgba(255, 255, 255, 0.25)',
-              margin: '0 auto 14px auto'
-            }} />
+            <div 
+              onClick={() => {
+                if (donationStep !== 'payment') {
+                  handleCloseDonationModal();
+                }
+              }}
+              style={{
+                width: '44px',
+                height: '5px',
+                borderRadius: '3px',
+                background: 'rgba(255, 255, 255, 0.3)',
+                margin: '0 auto 14px auto',
+                cursor: 'pointer',
+                touchAction: 'manipulation'
+              }} 
+            />
 
             {/* ================= STEP 1: SOVG'ALAR JAVONI ================= */}
             {donationStep === 'select' && (
@@ -1557,19 +2294,22 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                     type="button"
                     onClick={handleCloseDonationModal}
                     style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: 'none',
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
                       color: '#fff',
-                      width: '28px',
-                      height: '28px',
+                      width: '36px',
+                      height: '36px',
                       borderRadius: '50%',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                      flexShrink: 0
                     }}
+                    aria-label="Yopish"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 </div>
 
@@ -1656,19 +2396,22 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                     type="button"
                     onClick={handleCloseDonationModal}
                     style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: 'none',
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
                       color: '#fff',
-                      width: '28px',
-                      height: '28px',
+                      width: '36px',
+                      height: '36px',
                       borderRadius: '50%',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                      flexShrink: 0
                     }}
+                    aria-label="Yopish"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 </div>
 
@@ -1803,19 +2546,22 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                     type="button"
                     onClick={handleCloseDonationModal}
                     style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: 'none',
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
                       color: '#fff',
-                      width: '28px',
-                      height: '28px',
+                      width: '36px',
+                      height: '36px',
                       borderRadius: '50%',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                      flexShrink: 0
                     }}
+                    aria-label="Yopish"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 </div>
 
@@ -2046,15 +2792,16 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         }
         @keyframes fadeOutComment {
           0% {
-            opacity: 0.3;
+            opacity: 0.7;
             transform: translateY(0);
           }
           100% {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateY(-8px);
             max-height: 0;
-            padding: 0;
-            margin: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-bottom: 0;
             overflow: hidden;
           }
         }
@@ -2093,11 +2840,23 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         @keyframes donationBannerIn {
           from {
             opacity: 0;
-            transform: translate(-50%, -20px) scale(0.9);
+            transform: translate(-50%, -24px) scale(0.9);
           }
           to {
             opacity: 1;
             transform: translate(-50%, 0) scale(1);
+          }
+        }
+        @keyframes donationBannerOut {
+          from {
+            opacity: 1;
+            transform: translate(-50%, 0) scale(1);
+            filter: blur(0px);
+          }
+          to {
+            opacity: 0;
+            transform: translate(-50%, -24px) scale(0.92);
+            filter: blur(4px);
           }
         }
         @keyframes bounceGift {

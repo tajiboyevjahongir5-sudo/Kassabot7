@@ -208,6 +208,21 @@ export default function AdminView() {
     return () => clearInterval(jrInterval);
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'videochat') {
+      fetchStreamersAndLive();
+      const livePollInterval = setInterval(() => {
+        fetch(`${API_URL}/live/status`)
+          .then(r => r.json())
+          .then(lData => {
+            setAdminLiveStream(lData.active ? lData.stream : null);
+          })
+          .catch(() => {});
+      }, 5000);
+      return () => clearInterval(livePollInterval);
+    }
+  }, [activeTab]);
+
   const handleAddChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChannelId || !newChannelTitle) return;
@@ -534,6 +549,9 @@ export default function AdminView() {
       if (res.ok) {
         const data = await res.json();
         setAdminGifts(data.gifts || []);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        console.error('fetchAdminGifts error:', data.error);
       }
     } catch (e) {
       console.error('fetchAdminGifts error:', e);
@@ -544,16 +562,26 @@ export default function AdminView() {
 
   const handleAddGift = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGiftName.trim() || !newGiftPrice) return alert("Sovg'a nomi va narxi kiritilishi shart");
+    const cleanName = newGiftName.trim();
+    const priceNum = Number(newGiftPrice);
+
+    if (!cleanName) {
+      return alert("Sovg'a nomi kiritilishi shart");
+    }
+    if (!newGiftPrice || isNaN(priceNum) || priceNum <= 0) {
+      return alert("Sovg'a narxi musbat son bo'lishi kerak (0 dan katta)");
+    }
+
+    const cleanIcon = newGiftIcon.trim() || '🎁';
     setSavingGift(true);
     try {
       const res = await fetch(`${API_URL}/admin/gifts`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          name: newGiftName.trim(),
-          icon: newGiftIcon.trim() || '🎁',
-          price: Number(newGiftPrice),
+          name: cleanName,
+          icon: cleanIcon,
+          price: Math.floor(priceNum),
           animationType: newGiftAnim
         })
       });
@@ -561,13 +589,15 @@ export default function AdminView() {
         setNewGiftName('');
         setNewGiftPrice('');
         setNewGiftIcon('🎁');
+        setNewGiftAnim('bounce');
         fetchAdminGifts();
+        alert("Yangi sovg'a muvaffaqiyatli qo'shildi!");
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "Xatolik yuz berdi");
+        alert(data.error || "Sovg'a qo'shishda xatolik yuz berdi");
       }
     } catch {
-      alert("Server bilan bog'lanishda xatolik");
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
     } finally {
       setSavingGift(false);
     }
@@ -576,21 +606,40 @@ export default function AdminView() {
   const handleUpdateGift = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGift) return;
+
+    const cleanName = String(editingGift.name || '').trim();
+    const priceNum = Number(editingGift.price);
+
+    if (!cleanName) {
+      return alert("Sovg'a nomi bo'sh bo'lishi mumkin emas");
+    }
+    if (isNaN(priceNum) || priceNum <= 0) {
+      return alert("Sovg'a narxi musbat son bo'lishi kerak (0 dan katta)");
+    }
+
+    const cleanIcon = String(editingGift.icon || '').trim() || '🎁';
     setSavingGift(true);
     try {
       const res = await fetch(`${API_URL}/admin/gifts/${editingGift.id}`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify(editingGift)
+        body: JSON.stringify({
+          ...editingGift,
+          name: cleanName,
+          icon: cleanIcon,
+          price: Math.floor(priceNum)
+        })
       });
       if (res.ok) {
         setEditingGift(null);
         fetchAdminGifts();
+        alert("Sovg'a muvaffaqiyatli yangilandi!");
       } else {
-        alert("Yangilashda xatolik yuz berdi");
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Yangilashda xatolik yuz berdi");
       }
     } catch {
-      alert("Server xatosi");
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
     } finally {
       setSavingGift(false);
     }
@@ -605,9 +654,13 @@ export default function AdminView() {
       });
       if (res.ok) {
         fetchAdminGifts();
+        alert("Sovg'a o'chirildi!");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Sovg'ani o'chirishda xatolik yuz berdi");
       }
     } catch {
-      alert("O'chirishda xatolik");
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
     }
   };
 
@@ -633,16 +686,26 @@ export default function AdminView() {
 
   const handleAddStreamer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStreamerUserId.trim()) return alert("User ID kiritilishi shart");
+    const cleanUserId = newStreamerUserId.trim();
+    if (!cleanUserId) {
+      return alert("Telegram User ID kiritilishi shart");
+    }
+    if (!/^\d+$/.test(cleanUserId)) {
+      return alert("Telegram User ID faqat raqamlardan iborat bo'lishi kerak (masalan: 123456789)");
+    }
+
+    const cleanUsername = newStreamerUsername.trim().replace(/^@/, '') || null;
+    const cleanName = newStreamerName.trim() || null;
+
     setSavingStreamer(true);
     try {
       const res = await fetch(`${API_URL}/admin/streamers`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          userId: newStreamerUserId.trim(),
-          name: newStreamerName.trim() || null,
-          username: newStreamerUsername.trim() || null
+          userId: cleanUserId,
+          name: cleanName,
+          username: cleanUsername
         })
       });
       if (res.ok) {
@@ -650,12 +713,13 @@ export default function AdminView() {
         setNewStreamerName('');
         setNewStreamerUsername('');
         fetchStreamersAndLive();
+        alert("Yangi streamer muvaffaqiyatli qo'shildi!");
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "Xatolik");
+        alert(data.error || "Streamer qo'shishda xatolik yuz berdi");
       }
     } catch {
-      alert("Server xatosi");
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
     } finally {
       setSavingStreamer(false);
     }
@@ -670,23 +734,46 @@ export default function AdminView() {
       });
       if (res.ok) {
         fetchStreamersAndLive();
+        alert("Streamer muvaffaqiyatli o'chirildi!");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Streamerni o'chirishda xatolik yuz berdi");
       }
-    } catch {}
+    } catch {
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
+    }
   };
 
   const handleAdminEndLive = async () => {
-    if (!confirm("Haqiqatan ham jonli efirni majburan to'xtatmoqchimisiz?")) return;
+    if (!confirm("Haqiqatan ham jonli efirni majburan to'xtatmoqchimisiz? Barcha ishtirokchilar va streamer efirdan chiqariladi.")) return;
     try {
-      const res = await fetch(`${API_URL}/live/end`, {
+      // Avval admin endpointiga so'rov yuboramiz
+      let res = await fetch(`${API_URL}/admin/live/end`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ streamId: adminLiveStream?.id })
       });
-      if (res.ok) {
-        alert("Efir to'xtatildi!");
-        fetchStreamersAndLive();
+      
+      if (!res.ok) {
+        // Fallback to /api/live/end
+        res = await fetch(`${API_URL}/live/end`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ streamId: adminLiveStream?.id })
+        });
       }
-    } catch {}
+
+      if (res.ok) {
+        setAdminLiveStream(null);
+        alert("Jonli efir muvaffaqiyatli to'xtatildi! Barcha tomoshabinlar va streamer efirdan chiqarildi.");
+        fetchStreamersAndLive();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Efirni to'xtatishda xatolik yuz berdi");
+      }
+    } catch {
+      alert("Server bilan bog'lanishda xatolik yuz berdi");
+    }
   };
 
   const handlePaymentAction = async (id: number, action: 'confirm' | 'reject') => {
@@ -1066,6 +1153,7 @@ export default function AdminView() {
                         className="cyber-input"
                         style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
                         value={editingGift.icon || ''}
+                        maxLength={10}
                         onChange={e => setEditingGift({ ...editingGift, icon: e.target.value })}
                         required
                       />
@@ -1076,6 +1164,7 @@ export default function AdminView() {
                         className="cyber-input"
                         style={{ width: '100%' }}
                         value={editingGift.name || ''}
+                        maxLength={50}
                         onChange={e => setEditingGift({ ...editingGift, name: e.target.value })}
                         required
                       />
@@ -1084,6 +1173,8 @@ export default function AdminView() {
                       <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm)</label>
                       <input
                         type="number"
+                        min="1"
+                        step="100"
                         className="cyber-input"
                         style={{ width: '100%', fontWeight: '700', color: '#fef08a' }}
                         value={editingGift.price || ''}
@@ -1236,6 +1327,7 @@ export default function AdminView() {
                       className="cyber-input"
                       style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
                       value={newGiftIcon}
+                      maxLength={10}
                       onChange={e => setNewGiftIcon(e.target.value)}
                       placeholder="🎁"
                       required
@@ -1248,6 +1340,7 @@ export default function AdminView() {
                       style={{ width: '100%' }}
                       placeholder="Masalan: Oltin Kubok"
                       value={newGiftName}
+                      maxLength={50}
                       onChange={e => setNewGiftName(e.target.value)}
                       required
                     />
@@ -1256,6 +1349,8 @@ export default function AdminView() {
                     <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm) *</label>
                     <input
                       type="number"
+                      min="1"
+                      step="100"
                       className="cyber-input"
                       style={{ width: '100%' }}
                       placeholder="Masalan: 75000"

@@ -1,6 +1,7 @@
 import { Telegraf, Markup } from 'telegraf';
 import { prisma } from './prisma';
 import { incrementCardTransfer } from './cardService';
+import { donationEvents } from './donationEvents';
 import 'dotenv/config';
 import cron from 'node-cron';
 
@@ -342,8 +343,8 @@ bot.command('help', async (ctx) => {
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
 
 function extractNumbers(text: string): number[] {
-  // Remove decimal .00 or ,00
-  let temp = text.replace(/[,.]00\b/g, '');
+  // Remove decimal .00, ,00 or two-digit cents like .50
+  let temp = text.replace(/[,.]\d{2}\b/g, '');
   
   // Match candidate numbers (digits optionally separated by spaces, commas or dots)
   const matches = temp.match(/\b\d+(?:[\s,.]\d+)*\b/g) || [];
@@ -351,7 +352,7 @@ function extractNumbers(text: string): number[] {
   for (const m of matches) {
     const cleanVal = m.replace(/[\s,.]/g, '');
     const num = parseInt(cleanVal, 10);
-    if (!isNaN(num)) {
+    if (!isNaN(num) && num > 0) {
       results.push(num);
     }
   }
@@ -360,16 +361,16 @@ function extractNumbers(text: string): number[] {
 
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
 
-bot.on('channel_post', async (ctx) => {
+bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
   const channelId = ctx.chat.id.toString();
-  const text = (ctx.channelPost as any).text || (ctx.channelPost as any).caption || "";
+  const cp = (ctx.channelPost || (ctx as any).editedChannelPost) as any;
+  const text = cp?.text || cp?.caption || "";
 
   // 1. Check if this is a Log Channel for a mandatory Bot
   try {
     const isLogChannel = await prisma.mandatoryChannel.findFirst({ where: { channelId, type: 'BOT' } });
     if (isLogChannel) {
       let extractedUserId: string | null = null;
-      const cp = ctx.channelPost as any;
       
       // Check forward
       if (cp.forward_from && cp.forward_from.id) {
@@ -438,10 +439,14 @@ bot.on('channel_post', async (ctx) => {
     }
   }
 
+  // Deduplicate matched donations to prevent duplicate alerts and double counting
+  const uniqueDonationMatches = exactDonationMatches.filter((d, index, self) => 
+    self.findIndex(t => t.id === d.id) === index
+  );
+
   // Auto-confirm matched live donations!
-  if (exactDonationMatches.length > 0) {
-    const { triggerDonationDisplay } = await import('./api.js');
-    for (const donation of exactDonationMatches) {
+  if (uniqueDonationMatches.length > 0) {
+    for (const donation of uniqueDonationMatches) {
       try {
         const paidAt = new Date();
         const displayAt = new Date(Date.now() + 30000);
@@ -453,9 +458,9 @@ bot.on('channel_post', async (ctx) => {
 
         await incrementCardTransfer();
 
-        // Schedule 30-second broadcast to live stream
+        // Schedule 30-second broadcast via decoupled event emitter
         setTimeout(() => {
-          triggerDonationDisplay(donation.id);
+          donationEvents.emit('trigger_display', donation.id);
         }, 30000);
 
         // Notify user via Telegram bot

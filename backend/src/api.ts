@@ -8,6 +8,8 @@ import { bot } from './bot';
 
 import path from 'path';
 import fs from 'fs';
+import { validateWebAppData } from './utils/telegramAuth';
+import { donationEvents } from './donationEvents.js';
 
 // In-memory cache — TTL 30 seconds for stats, 5 mins for channels
 const cache = new NodeCache({ stdTTL: 30, checkperiod: 10, useClones: false });
@@ -94,6 +96,25 @@ const requireAdmin = (req: express.Request, res: express.Response, next: express
   }
 
   next();
+};
+
+export const checkRequestIsAdmin = (req: express.Request): boolean => {
+  try {
+    const initData = req.headers['x-telegram-init-data'] as string;
+    const botToken = process.env.BOT_TOKEN;
+    const adminIdEnv = process.env.ADMIN_ID;
+
+    if (!adminIdEnv || !adminIdEnv.trim() || !initData || !botToken) {
+      return false;
+    }
+
+    const user = validateWebAppData(initData, botToken);
+    const adminIds = adminIdEnv.split(',').map(id => id.trim()).filter(Boolean);
+
+    return Boolean(user && adminIds.includes(user.id?.toString()));
+  } catch {
+    return false;
+  }
 };
 
 // Get all channels (public)
@@ -323,7 +344,6 @@ app.post('/api/create-payment', async (req, res) => {
   }
 });
 // Admin Middleware
-import { validateWebAppData } from './utils/telegramAuth';
 
 // Hide the restored revenue dummy plan from users
 setTimeout(async () => {
@@ -763,14 +783,47 @@ interface LiveSSEClient {
 }
 
 let activeLiveClients: LiveSSEClient[] = [];
+let lastLiveFrame: string | null = null;
+
+function getActiveViewersCount(): number {
+  return activeLiveClients.filter(c => c.role === 'viewer' && !c.res.writableEnded && !c.res.destroyed).length;
+}
+
+function escapeLiveHtml(text: string): string {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
+}
 
 function broadcastLiveEvent(eventType: string, data: any, filter?: (client: LiveSSEClient) => boolean) {
   const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const client of activeLiveClients) {
+  const prevCount = getActiveViewersCount();
+  let deadViewerRemoved = false;
+
+  activeLiveClients = activeLiveClients.filter(client => {
+    if (client.res.writableEnded || client.res.destroyed) {
+      if (client.role === 'viewer') deadViewerRemoved = true;
+      return false;
+    }
     if (!filter || filter(client)) {
       try {
         client.res.write(payload);
-      } catch {}
+      } catch {
+        if (client.role === 'viewer') deadViewerRemoved = true;
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (deadViewerRemoved && eventType !== 'viewers_count') {
+    const currentCount = getActiveViewersCount();
+    if (currentCount !== prevCount) {
+      broadcastLiveEvent('viewers_count', { count: currentCount });
     }
   }
 }
@@ -821,7 +874,7 @@ app.get('/api/live/status', async (_req, res) => {
         streamerName: activeStream.streamerName,
         title: activeStream.title,
         startedAt: activeStream.startedAt,
-        viewersCount: Math.max(activeLiveClients.filter(c => c.role === 'viewer').length, 1)
+        viewersCount: getActiveViewersCount()
       },
       recentComments: (activeStream.comments || []).reverse()
     });
@@ -904,7 +957,7 @@ app.post('/api/live/start', async (req, res) => {
         streamerName: stream.streamerName,
         title: stream.title,
         startedAt: stream.startedAt,
-        viewersCount: 1
+        viewersCount: getActiveViewersCount()
       }
     });
 
@@ -940,12 +993,14 @@ app.post('/api/live/start', async (req, res) => {
   }
 });
 
-// 5. End live stream
+// 5. End live stream (Called by streamer or admin)
 app.post('/api/live/end', async (req, res) => {
   try {
     const { streamId, streamerId } = req.body;
-    const isAuthorized = await checkIsStreamer(streamerId);
-    if (!isAuthorized) {
+    const isAdmin = checkRequestIsAdmin(req);
+    const isStreamer = streamerId ? await checkIsStreamer(streamerId) : false;
+
+    if (!isAdmin && !isStreamer) {
       return res.status(403).json({ error: 'Ruxsat berilmagan' });
     }
 
@@ -954,17 +1009,55 @@ app.post('/api/live/end', async (req, res) => {
         where: { id: Number(streamId) },
         data: { status: 'ENDED', endedAt: new Date() }
       }).catch(() => {});
-    } else {
-      await (prisma as any).liveStream.updateMany({
-        where: { status: 'ACTIVE' },
-        data: { status: 'ENDED', endedAt: new Date() }
-      });
     }
 
-    broadcastLiveEvent('stream_ended', { message: 'Jonli efir yakunlandi' });
+    // Always ensure all active streams are ended
+    await (prisma as any).liveStream.updateMany({
+      where: { status: 'ACTIVE' },
+      data: { status: 'ENDED', endedAt: new Date() }
+    });
+
+    lastLiveFrame = null;
+    broadcastLiveEvent('stream_ended', { 
+      message: isAdmin ? 'Jonli efir admin tomonidan to\'xtatildi' : 'Jonli efir yakunlandi',
+      endedBy: isAdmin ? 'admin' : 'streamer'
+    });
+    broadcastLiveEvent('viewers_count', { count: 0 });
+
     res.json({ success: true });
   } catch (err) {
     console.error('end stream error:', err);
+    res.status(500).json({ error: 'Failed to end stream' });
+  }
+});
+
+// 5.1 Admin End live stream explicitly
+app.post('/api/admin/live/end', requireAdmin, async (req, res) => {
+  try {
+    const { streamId } = req.body;
+
+    if (streamId) {
+      await (prisma as any).liveStream.update({
+        where: { id: Number(streamId) },
+        data: { status: 'ENDED', endedAt: new Date() }
+      }).catch(() => {});
+    }
+
+    await (prisma as any).liveStream.updateMany({
+      where: { status: 'ACTIVE' },
+      data: { status: 'ENDED', endedAt: new Date() }
+    });
+
+    lastLiveFrame = null;
+    broadcastLiveEvent('stream_ended', { 
+      message: 'Jonli efir admin tomonidan to\'xtatildi',
+      endedBy: 'admin'
+    });
+    broadcastLiveEvent('viewers_count', { count: 0 });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('admin end stream error:', err);
     res.status(500).json({ error: 'Failed to end stream' });
   }
 });
@@ -977,52 +1070,92 @@ app.get('/api/live/events', async (req, res) => {
   const clientId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
   const client: LiveSSEClient = { id: clientId, userId, name, role, res };
   activeLiveClients.push(client);
 
-  const viewersCount = Math.max(activeLiveClients.filter(c => c.role === 'viewer').length, 1);
+  const viewersCount = getActiveViewersCount();
   res.write(`event: init\ndata: ${JSON.stringify({ clientId, viewersCount })}\n\n`);
 
   broadcastLiveEvent('viewers_count', { count: viewersCount });
 
+  // If there is a cached frame and client is viewer, push immediately for instant visual
   if (role === 'viewer') {
+    if (lastLiveFrame) {
+      try {
+        res.write(`event: video_frame\ndata: ${JSON.stringify({ frame: lastLiveFrame })}\n\n`);
+      } catch {}
+    }
     broadcastLiveEvent('viewer_joined', { userId, name, clientId }, c => c.role === 'streamer');
+  } else if (role === 'streamer') {
+    // Inform newly connected streamer about all currently active viewers
+    const existingViewers = activeLiveClients
+      .filter(c => c.role === 'viewer' && c.id !== clientId)
+      .map(c => ({ userId: c.userId, name: c.name, clientId: c.id }));
+    if (existingViewers.length > 0) {
+      try {
+        res.write(`event: existing_viewers\ndata: ${JSON.stringify({ viewers: existingViewers })}\n\n`);
+      } catch {}
+    }
   }
 
+  // Periodic heartbeat comment and ping event
   const heartbeatInterval = setInterval(() => {
     try {
       res.write(': heartbeat\n\n');
+      res.write(`event: ping\ndata: ${JSON.stringify({ time: Date.now() })}\n\n`);
     } catch {
-      clearInterval(heartbeatInterval);
+      cleanup();
     }
-  }, 20000);
+  }, 15000);
 
-  req.on('close', () => {
+  let isCleanedUp = false;
+  const cleanup = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
     clearInterval(heartbeatInterval);
+    const prevCount = getActiveViewersCount();
     activeLiveClients = activeLiveClients.filter(c => c.id !== clientId);
-    const updatedCount = Math.max(activeLiveClients.filter(c => c.role === 'viewer').length, 1);
-    broadcastLiveEvent('viewers_count', { count: updatedCount });
+    const updatedCount = getActiveViewersCount();
+    if (prevCount !== updatedCount) {
+      broadcastLiveEvent('viewers_count', { count: updatedCount });
+    }
 
     if (role === 'viewer') {
       broadcastLiveEvent('viewer_left', { userId, clientId }, c => c.role === 'streamer');
     }
-  });
+  };
+
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+  req.on('error', cleanup);
+  res.on('error', cleanup);
 });
 
 // 7. Post a live comment
 app.post('/api/live/comment', async (req, res) => {
   try {
     const { streamId, userId, userName, text } = req.body;
-    if (!text || !text.trim()) {
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Matn kiritilmadi' });
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
       return res.status(400).json({ error: 'Matn bo\'sh' });
     }
 
-    const commentText = String(text).trim().slice(0, 300);
-    const authorName = String(userName || 'Foydalanuvchi').trim().slice(0, 40);
+    if (trimmedText.length > 200) {
+      return res.status(400).json({ error: 'Sharh 200 ta belgidan oshmasligi kerak' });
+    }
+
+    // Escape XSS to prevent injection
+    const sanitizedText = escapeLiveHtml(trimmedText);
+    const sanitizedAuthor = escapeLiveHtml(String(userName || 'Foydalanuvchi').trim().slice(0, 40) || 'Foydalanuvchi');
 
     let savedCommentId = Date.now();
     if (streamId) {
@@ -1031,8 +1164,8 @@ app.post('/api/live/comment', async (req, res) => {
           data: {
             streamId: Number(streamId),
             userId: String(userId || 'anon'),
-            userName: authorName,
-            text: commentText
+            userName: sanitizedAuthor,
+            text: sanitizedText
           }
         });
         savedCommentId = saved.id;
@@ -1044,9 +1177,9 @@ app.post('/api/live/comment', async (req, res) => {
     const commentData = {
       id: savedCommentId,
       streamId,
-      userId: String(userId),
-      userName: authorName,
-      text: commentText,
+      userId: String(userId || 'anon'),
+      userName: sanitizedAuthor,
+      text: sanitizedText,
       createdAt: new Date().toISOString()
     };
 
@@ -1059,16 +1192,28 @@ app.post('/api/live/comment', async (req, res) => {
   }
 });
 
+// 7.5 Lightweight live reaction endpoint (does not spam DB comment table)
+app.post('/api/live/reaction', (req, res) => {
+  try {
+    const { streamId, emoji = '❤️' } = req.body;
+    const cleanEmoji = String(emoji).slice(0, 10);
+    broadcastLiveEvent('new_reaction', { streamId, emoji: cleanEmoji });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send reaction' });
+  }
+});
+
 // 8. WebRTC Signaling exchange
 app.post('/api/live/signal', (req, res) => {
   const { targetClientId, targetRole, senderId, type, data } = req.body;
   
   if (targetClientId) {
-    broadcastLiveEvent('webrtc_signal', { senderId, type, data }, c => c.id === targetClientId);
+    broadcastLiveEvent('webrtc_signal', { senderId, targetClientId, targetRole, type, data }, c => c.id === targetClientId);
   } else if (targetRole) {
-    broadcastLiveEvent('webrtc_signal', { senderId, type, data }, c => c.role === targetRole);
+    broadcastLiveEvent('webrtc_signal', { senderId, targetClientId, targetRole, type, data }, c => c.role === targetRole);
   } else {
-    broadcastLiveEvent('webrtc_signal', { senderId, type, data });
+    broadcastLiveEvent('webrtc_signal', { senderId, targetClientId, targetRole, type, data });
   }
 
   res.json({ ok: true });
@@ -1079,6 +1224,7 @@ app.post('/api/live/frame', (req, res) => {
   const { frame, streamerId } = req.body;
   if (!frame) return res.status(400).json({ error: 'Frame required' });
 
+  lastLiveFrame = frame;
   broadcastLiveEvent('video_frame', { frame }, c => c.role === 'viewer');
   res.json({ ok: true });
 });
@@ -1098,12 +1244,9 @@ export const DEFAULT_DONATION_GIFTS = [
 // Helper to seed gifts if empty
 async function getOrSeedGifts() {
   try {
-    let gifts = await (prisma as any).liveGift.findMany({
-      where: { isActive: true },
-      orderBy: { order: 'asc' }
-    });
+    const totalCount = await (prisma as any).liveGift.count();
 
-    if (!gifts || gifts.length === 0) {
+    if (totalCount === 0) {
       console.log('[DONATIONS] Seeding initial live gifts...');
       for (const dg of DEFAULT_DONATION_GIFTS) {
         await (prisma as any).liveGift.upsert({
@@ -1112,11 +1255,12 @@ async function getOrSeedGifts() {
           create: dg
         });
       }
-      gifts = await (prisma as any).liveGift.findMany({
-        where: { isActive: true },
-        orderBy: { order: 'asc' }
-      });
     }
+
+    const gifts = await (prisma as any).liveGift.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' }
+    });
 
     return gifts.map((g: any) => ({
       id: g.giftKey,
@@ -1164,7 +1308,7 @@ export async function triggerDonationDisplay(donationId: number) {
       giftName: donation.giftName,
       giftIcon: donation.giftIcon,
       amount: donation.amount,
-      message: donation.message,
+      message: donation.message || '',
       timestamp: Date.now()
     });
 
@@ -1173,6 +1317,28 @@ export async function triggerDonationDisplay(donationId: number) {
     console.error('triggerDonationDisplay error:', err);
   }
 }
+
+// Connect decouple event emitter
+donationEvents.on('trigger_display', async (donationId: number) => {
+  await triggerDonationDisplay(donationId);
+});
+
+// Periodic background check for pending broadcast donations (recovers from server restarts or missed timers)
+setInterval(async () => {
+  try {
+    const overdueDonations = await (prisma as any).liveDonation.findMany({
+      where: {
+        status: 'PAID',
+        displayAt: { lte: new Date() }
+      },
+      take: 10
+    });
+
+    for (const d of overdueDonations) {
+      await triggerDonationDisplay(d.id);
+    }
+  } catch {}
+}, 3000);
 
 // 1. Get donation gifts list (Public for viewers & streamer)
 app.get('/api/live/gifts', async (_req, res) => {
@@ -1189,7 +1355,8 @@ app.get('/api/admin/gifts', requireAdmin, async (_req, res) => {
     });
     res.json({ gifts });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch gifts' });
+    console.error('fetch gifts error:', err);
+    res.status(500).json({ error: 'Sovg\'alarni yuklashda xatolik yuz berdi' });
   }
 });
 
@@ -1197,9 +1364,31 @@ app.get('/api/admin/gifts', requireAdmin, async (_req, res) => {
 app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
   try {
     const { name, icon, price, description, animationType, glowColor } = req.body;
-    if (!name || !price) {
-      return res.status(400).json({ error: 'Nomi va narxi majburiy' });
+
+    // Nom validatsiyasi
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Sovg\'a nomi kiritilishi shart' });
     }
+    const cleanName = name.trim();
+    if (cleanName.length > 50) {
+      return res.status(400).json({ error: 'Sovg\'a nomi 50 ta belgidan oshmasligi kerak' });
+    }
+
+    // Narx validatsiyasi
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || !Number.isFinite(numPrice) || numPrice <= 0) {
+      return res.status(400).json({ error: 'Sovg\'a narxi musbat son bo\'lishi kerak (0 dan katta)' });
+    }
+
+    // Ikonka/emoji validatsiyasi
+    let cleanIcon = (typeof icon === 'string' ? icon.trim() : '') || '🎁';
+    if (cleanIcon.length > 10) {
+      cleanIcon = cleanIcon.slice(0, 10);
+    }
+
+    // Animatsiya turi
+    const validAnimations = ['bounce', 'sway', 'fly', 'spin', 'pulse', 'shake'];
+    const cleanAnimation = validAnimations.includes(String(animationType)) ? String(animationType) : 'bounce';
 
     const giftKey = 'gift_' + Date.now();
     const count = await (prisma as any).liveGift.count();
@@ -1207,12 +1396,12 @@ app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
     const created = await (prisma as any).liveGift.create({
       data: {
         giftKey,
-        name: String(name).trim(),
-        icon: icon || '🎁',
-        price: Number(price),
-        description: description || null,
-        animationType: animationType || 'bounce',
-        glowColor: glowColor || 'rgba(245, 158, 11, 0.8)',
+        name: cleanName,
+        icon: cleanIcon,
+        price: Math.floor(numPrice),
+        description: description ? String(description).trim() : null,
+        animationType: cleanAnimation,
+        glowColor: glowColor ? String(glowColor).trim() : 'rgba(245, 158, 11, 0.8)',
         order: count + 1,
         isActive: true
       }
@@ -1225,30 +1414,79 @@ app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
   }
 });
 
-// 4. Admin: Update gift (edit price, name, icon, etc.)
+// 4. Admin: Update gift (edit price, name, icon, animation, etc.)
 app.put('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'Noto\'g\'ri sovg\'a ID raqami' });
+    }
+
+    const existing = await (prisma as any).liveGift.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Sovg\'a topilmadi' });
+    }
+
     const { name, icon, price, description, animationType, glowColor, isActive, order } = req.body;
+    const dataToUpdate: any = {};
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Sovg\'a nomi bo\'sh bo\'lishi mumkin emas' });
+      }
+      if (name.trim().length > 50) {
+        return res.status(400).json({ error: 'Sovg\'a nomi 50 ta belgidan oshmasligi kerak' });
+      }
+      dataToUpdate.name = name.trim();
+    }
+
+    if (price !== undefined) {
+      const numPrice = Number(price);
+      if (isNaN(numPrice) || !Number.isFinite(numPrice) || numPrice <= 0) {
+        return res.status(400).json({ error: 'Sovg\'a narxi musbat son bo\'lishi kerak (0 dan katta)' });
+      }
+      dataToUpdate.price = Math.floor(numPrice);
+    }
+
+    if (icon !== undefined) {
+      let cleanIcon = (typeof icon === 'string' ? icon.trim() : '') || '🎁';
+      if (cleanIcon.length > 10) cleanIcon = cleanIcon.slice(0, 10);
+      dataToUpdate.icon = cleanIcon;
+    }
+
+    if (description !== undefined) {
+      dataToUpdate.description = description ? String(description).trim() : null;
+    }
+
+    if (animationType !== undefined) {
+      const validAnimations = ['bounce', 'sway', 'fly', 'spin', 'pulse', 'shake'];
+      dataToUpdate.animationType = validAnimations.includes(String(animationType)) ? String(animationType) : 'bounce';
+    }
+
+    if (glowColor !== undefined) {
+      dataToUpdate.glowColor = String(glowColor).trim() || 'rgba(245, 158, 11, 0.8)';
+    }
+
+    if (isActive !== undefined) {
+      dataToUpdate.isActive = Boolean(isActive);
+    }
+
+    if (order !== undefined) {
+      const numOrder = Number(order);
+      if (!isNaN(numOrder)) {
+        dataToUpdate.order = numOrder;
+      }
+    }
 
     const updated = await (prisma as any).liveGift.update({
       where: { id },
-      data: {
-        ...(name !== undefined && { name: String(name).trim() }),
-        ...(icon !== undefined && { icon: String(icon).trim() }),
-        ...(price !== undefined && { price: Number(price) }),
-        ...(description !== undefined && { description: description ? String(description).trim() : null }),
-        ...(animationType !== undefined && { animationType: String(animationType) }),
-        ...(glowColor !== undefined && { glowColor: String(glowColor) }),
-        ...(isActive !== undefined && { isActive: Boolean(isActive) }),
-        ...(order !== undefined && { order: Number(order) })
-      }
+      data: dataToUpdate
     });
 
     res.json({ gift: updated });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Update gift error:', err);
-    res.status(500).json({ error: 'Sovg\'ani yangilashda xatolik' });
+    res.status(500).json({ error: 'Sovg\'ani yangilashda xatolik', detail: err?.message });
   }
 });
 
@@ -1256,10 +1494,20 @@ app.put('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
 app.delete('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'Noto\'g\'ri sovg\'a ID raqami' });
+    }
+
+    const existing = await (prisma as any).liveGift.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Sovg\'a topilmadi' });
+    }
+
     await (prisma as any).liveGift.delete({ where: { id } });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Sovg\'ani o\'chirishda xatolik' });
+    res.json({ success: true, message: 'Sovg\'a muvaffaqiyatli o\'chirildi' });
+  } catch (err: any) {
+    console.error('Delete gift error:', err);
+    res.status(500).json({ error: 'Sovg\'ani o\'chirishda xatolik', detail: err?.message });
   }
 });
 
@@ -1272,10 +1520,25 @@ app.post('/api/live/donate/create', async (req, res) => {
     }
 
     const allGifts = await getOrSeedGifts();
-    const gift = allGifts.find((g: any) => g.id === giftId || String(g.dbId) === String(giftId));
+    const gift = allGifts.find((g: any) => 
+      g.id === giftId || g.giftKey === giftId || String(g.dbId) === String(giftId)
+    );
     if (!gift) {
       return res.status(400).json({ error: 'Noto\'g\'ri sovg\'a tanlandi' });
     }
+
+    // Clean up stale pending donations older than 30 mins
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    await (prisma as any).liveDonation.updateMany({
+      where: { status: 'PENDING', createdAt: { lt: thirtyMinutesAgo } },
+      data: { status: 'CANCELLED' }
+    }).catch(() => {});
+
+    // Cancel any previous uncompleted PENDING donation for THIS user to free suffix and prevent duplicates
+    await (prisma as any).liveDonation.updateMany({
+      where: { userId: String(userId), status: 'PENDING' },
+      data: { status: 'CANCELLED' }
+    }).catch(() => {});
 
     // Get active live stream if any
     const activeStream = await (prisma as any).liveStream.findFirst({
@@ -1283,40 +1546,68 @@ app.post('/api/live/donate/create', async (req, res) => {
       orderBy: { id: 'desc' }
     });
 
-    // Get active card & settings
-    const activeCard = await prisma.card.findFirst({ where: { isActive: true } });
+    // Get active card & settings with auto fallback to first slot
+    let activeCard = await prisma.card.findFirst({ where: { isActive: true } });
+    if (!activeCard) {
+      activeCard = await prisma.card.findFirst({ orderBy: { slot: 'asc' } });
+      if (activeCard) {
+        await prisma.card.update({
+          where: { id: activeCard.id },
+          data: { isActive: true }
+        }).catch(() => {});
+      }
+    }
+
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    const cardNumber = activeCard ? activeCard.cardNumber : '';
-    const cardHolder = activeCard ? activeCard.cardHolder : '';
-    const bankName = activeCard ? activeCard.bankName : '';
+    const cardNumber = activeCard ? activeCard.cardNumber.trim() : '';
+    const cardHolder = activeCard ? activeCard.cardHolder.trim() : '';
+    const bankName = activeCard ? activeCard.bankName.trim() : '';
     const clickP2pUrl = (activeCard && activeCard.clickP2pUrl) ? activeCard.clickP2pUrl : (settings?.clickP2pUrl || '');
 
-    // Generate unique random suffix (1..999) to differentiate payments
+    // Generate guaranteed unique random suffix (100..999) to differentiate payments
     const pendingDonations = await (prisma as any).liveDonation.findMany({
       where: { status: 'PENDING' }
     });
     const pendingPayments = await prisma.payment.findMany({
-      where: { status: 'PENDING' }
+      where: { status: 'PENDING', createdAt: { gte: thirtyMinutesAgo } }
     });
     const busyAmounts = new Set([
       ...pendingDonations.map((d: any) => d.amount),
       ...pendingPayments.map(p => p.amount)
     ]);
 
-    let randomSuffix = Math.floor(Math.random() * 900) + 100;
-    let exactAmount = gift.price + randomSuffix;
-    let attempts = 0;
-    while (busyAmounts.has(exactAmount) && attempts < 50) {
-      randomSuffix = Math.floor(Math.random() * 900) + 100;
-      exactAmount = gift.price + randomSuffix;
-      attempts++;
+    let exactAmount = 0;
+    // 1. Try randomized suffixes first
+    for (let attempts = 0; attempts < 30; attempts++) {
+      const randomSuffix = Math.floor(Math.random() * 900) + 100;
+      const candidate = gift.price + randomSuffix;
+      if (!busyAmounts.has(candidate)) {
+        exactAmount = candidate;
+        break;
+      }
+    }
+
+    // 2. Sequential search if randomized pool is busy
+    if (!exactAmount) {
+      for (let s = 101; s <= 999; s++) {
+        const candidate = gift.price + s;
+        if (!busyAmounts.has(candidate)) {
+          exactAmount = candidate;
+          break;
+        }
+      }
+    }
+
+    // 3. Fallback
+    if (!exactAmount) {
+      exactAmount = gift.price + Math.floor(Math.random() * 900) + 100;
     }
 
     const donation = await (prisma as any).liveDonation.create({
       data: {
         streamId: activeStream?.id || null,
         userId: String(userId),
-        userName: userName || 'Mehmon',
+        userName: String(userName || 'Mehmon').trim().slice(0, 50),
         giftId: gift.id,
         giftName: gift.name,
         giftIcon: gift.icon,
@@ -1324,7 +1615,7 @@ app.post('/api/live/donate/create', async (req, res) => {
         amount: exactAmount,
         message: (message || '').trim().slice(0, 200),
         status: 'PENDING',
-        cardDetails: `${cardNumber} (${cardHolder})`
+        cardDetails: cardNumber ? `${cardNumber} (${cardHolder})` : 'Karta topilmadi'
       }
     });
 
@@ -1344,10 +1635,14 @@ app.post('/api/live/donate/create', async (req, res) => {
   }
 });
 
-// 3. Check donation payment status ("To'lov qildim" pressed)
+// 3. Check donation payment status ("To'lov qildim" pressed or auto-polled)
 app.post('/api/live/donate/check/:donationId', async (req, res) => {
   try {
     const donationId = Number(req.params.donationId);
+    if (!donationId || isNaN(donationId)) {
+      return res.status(400).json({ error: 'Noto\'g\'ri donat ID' });
+    }
+
     const donation = await (prisma as any).liveDonation.findUnique({
       where: { id: donationId }
     });
@@ -1356,53 +1651,25 @@ app.post('/api/live/donate/check/:donationId', async (req, res) => {
       return res.status(404).json({ error: 'Donat topilmadi' });
     }
 
+    // If cancelled or expired
+    if (donation.status === 'CANCELLED') {
+      return res.json({
+        success: false,
+        status: 'CANCELLED',
+        message: 'Ushbu donat bekor qilingan yoki muddati o\'tgan. Iltimos, yangi sovg\'a tanlang.'
+      });
+    }
+
     // Already paid or displayed
     if (donation.status === 'PAID' || donation.status === 'DISPLAYED') {
+      const remainingSeconds = donation.displayAt 
+        ? Math.max(0, Math.ceil((new Date(donation.displayAt).getTime() - Date.now()) / 1000))
+        : 0;
+
       return res.json({
         success: true,
         status: donation.status,
-        displayInSeconds: 30
-      });
-    }
-
-    // Check payment channel or verify payment
-    let paymentFound = false;
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-
-    // If payment channel configured, check if bot can verify
-    if (settings?.paymentChannelId) {
-      // The channel listener automatically catches posts, but we can also check if a matching payment was created
-      // Or check recent payments
-      const recentMatched = await prisma.payment.findFirst({
-        where: { amount: donation.amount, status: 'COMPLETED' }
-      });
-      if (recentMatched) {
-        paymentFound = true;
-      }
-    }
-
-    if (paymentFound) {
-      const paidAt = new Date();
-      const displayAt = new Date(Date.now() + 30000); // 30 seconds after confirmation
-
-      await (prisma as any).liveDonation.update({
-        where: { id: donationId },
-        data: {
-          status: 'PAID',
-          paidAt,
-          displayAt
-        }
-      });
-
-      // Schedule trigger in 30 seconds
-      setTimeout(() => {
-        triggerDonationDisplay(donationId);
-      }, 30000);
-
-      return res.json({
-        success: true,
-        status: 'PAID',
-        displayInSeconds: 30
+        displayInSeconds: remainingSeconds
       });
     }
 
@@ -1436,9 +1703,9 @@ app.post('/api/live/donate/confirm/:donationId', async (req, res) => {
       data: { status: 'PAID', paidAt, displayAt }
     });
 
-    // Schedule 30-second broadcast
+    // Schedule 30-second broadcast via event emitter & direct timeout
     setTimeout(() => {
-      triggerDonationDisplay(donationId);
+      donationEvents.emit('trigger_display', donationId);
     }, 30000);
 
     res.json({ success: true, displayInSeconds: 30 });
@@ -1465,29 +1732,48 @@ app.get('/api/admin/streamers', requireAdmin, async (_req, res) => {
 app.post('/api/admin/streamers', requireAdmin, async (req, res) => {
   try {
     const { userId, username, name } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId kiritilishi shart' });
+    if (!userId || !String(userId).trim()) {
+      return res.status(400).json({ error: 'Telegram User ID kiritilishi shart' });
+    }
+
+    const cleanUserId = String(userId).trim();
+    if (!/^\d+$/.test(cleanUserId)) {
+      return res.status(400).json({ error: 'Telegram User ID faqat raqamlardan iborat bo\'lishi kerak' });
+    }
+
+    const cleanUsername = username ? String(username).replace(/^@/, '').trim() : null;
+    const cleanName = name ? String(name).trim() : null;
 
     const created = await (prisma as any).streamer.upsert({
-      where: { userId: String(userId).trim() },
-      update: { username: username || null, name: name || null },
-      create: { userId: String(userId).trim(), username: username || null, name: name || null }
+      where: { userId: cleanUserId },
+      update: { username: cleanUsername || null, name: cleanName || null },
+      create: { userId: cleanUserId, username: cleanUsername || null, name: cleanName || null }
     });
 
     res.json(created);
-  } catch (err) {
+  } catch (err: any) {
     console.error('add streamer error:', err);
-    res.status(500).json({ error: 'Failed to add streamer' });
+    res.status(500).json({ error: 'Streamer qo\'shishda xatolik', detail: err?.message });
   }
 });
 
 app.delete('/api/admin/streamers/:id', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'Noto\'g\'ri streamer ID raqami' });
+    }
+
+    const existing = await (prisma as any).streamer.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Streamer topilmadi' });
+    }
+
     await (prisma as any).streamer.delete({ where: { id } });
-    res.json({ success: true });
-  } catch (err) {
+    res.json({ success: true, message: 'Streamer muvaffaqiyatli o\'chirildi' });
+  } catch (err: any) {
     console.error('delete streamer error:', err);
-    res.status(500).json({ error: 'Failed to delete streamer' });
+    res.status(500).json({ error: 'Streamerni o\'chirishda xatolik', detail: err?.message });
   }
 });
 
