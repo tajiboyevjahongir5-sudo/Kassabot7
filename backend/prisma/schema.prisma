@@ -81,6 +81,15 @@ model BotSubscriber {
   @@unique([userId, logChannelId])
 }
 
+model JoinRequestChannel {
+  id            Int      @id @default(autoincrement())
+  channelId     String   @unique // Telegram chat ID (masalan: -100xxx)
+  title         String           // Kanal nomi (masalan: VIP Kanal 1)
+  inviteLink    String?          // Kanalga havola (masalan: https://t.me/+abc)
+  customMessage String?          // Kanal uchun maxsus xabar (ixtiyoriy)
+  createdAt     DateTime @default(now())
+}
+
 model JoinRequest {
   id        Int      @id @default(autoincrement())
   userId    String

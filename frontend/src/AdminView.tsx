@@ -20,6 +20,15 @@ interface Channel {
   plans: Plan[];
 }
 
+interface JoinRequestChannel {
+  id: number;
+  channelId: string;
+  title: string;
+  inviteLink: string | null;
+  customMessage: string | null;
+  pendingCount?: number;
+}
+
 const tg = (window as any).Telegram?.WebApp;
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -34,6 +43,17 @@ export default function AdminView() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [joinRequestsCount, setJoinRequestsCount] = useState<number>(0);
   const [approvingJoinRequests, setApprovingJoinRequests] = useState<boolean>(false);
+
+  // Join Request Channels
+  const [joinRequestChannels, setJoinRequestChannels] = useState<JoinRequestChannel[]>([]);
+  const [editingJrChannel, setEditingJrChannel] = useState<JoinRequestChannel | null>(null);
+  const [showAddJrModal, setShowAddJrModal] = useState<boolean>(false);
+  const [newJrChannelId, setNewJrChannelId] = useState('');
+  const [newJrTitle, setNewJrTitle] = useState('');
+  const [newJrInviteLink, setNewJrInviteLink] = useState('');
+  const [newJrCustomMsg, setNewJrCustomMsg] = useState('');
+  const [savingJrChannel, setSavingJrChannel] = useState(false);
+  const [approvingChannelId, setApprovingChannelId] = useState<string | null>(null);
 
   // Broadcast
   const [broadcastText, setBroadcastText] = useState('');
@@ -122,11 +142,12 @@ export default function AdminView() {
       const monthlyRes = await fetch(`${API_URL}/admin/monthly-revenue`, { headers });
       if (monthlyRes.ok) setMonthlyRevenue(await monthlyRes.json());
 
-      // Fetch pending join requests stats
-      const jrRes = await fetch(`${API_URL}/admin/join-requests/stats`, { headers });
+      // Fetch pending join requests stats and channels
+      const jrRes = await fetch(`${API_URL}/admin/join-request-channels`, { headers });
       if (jrRes.ok) {
         const jrData = await jrRes.json();
-        setJoinRequestsCount(jrData.count || 0);
+        setJoinRequestChannels(jrData.channels || []);
+        setJoinRequestsCount(jrData.totalPending || 0);
       }
     } catch (err) {
       console.error(err);
@@ -137,10 +158,11 @@ export default function AdminView() {
 
   const fetchJoinRequestStats = async () => {
     try {
-      const res = await fetch(`${API_URL}/admin/join-requests/stats`, { headers });
+      const res = await fetch(`${API_URL}/admin/join-request-channels`, { headers });
       if (res.ok) {
         const data = await res.json();
-        setJoinRequestsCount(data.count || 0);
+        setJoinRequestChannels(data.channels || []);
+        setJoinRequestsCount(data.totalPending || 0);
       }
     } catch (err) {
       console.error('fetchJoinRequestStats error:', err);
@@ -369,24 +391,111 @@ export default function AdminView() {
     }
   };
 
-  const handleApproveAllJoinRequests = async () => {
-    if (joinRequestsCount === 0) {
-      alert("Hozircha kutilayotgan zayavkalar yo'q.");
+  const openAddJrModal = () => {
+    setEditingJrChannel(null);
+    setNewJrChannelId('');
+    setNewJrTitle('');
+    setNewJrInviteLink('');
+    setNewJrCustomMsg('');
+    setShowAddJrModal(true);
+  };
+
+  const openEditJrModal = (ch: JoinRequestChannel) => {
+    setEditingJrChannel(ch);
+    setNewJrChannelId(ch.channelId);
+    setNewJrTitle(ch.title);
+    setNewJrInviteLink(ch.inviteLink || '');
+    setNewJrCustomMsg(ch.customMessage || '');
+    setShowAddJrModal(true);
+  };
+
+  const handleSaveJrChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newJrChannelId.trim()) {
+      alert("Kanal ID kiritilishi shart!");
       return;
     }
-    if (!confirm(`Haqiqatan ham barcha (${joinRequestsCount} ta) zayavkalarni kanalga qabul qilmoqchimisiz?`)) {
+    setSavingJrChannel(true);
+    try {
+      const isEdit = Boolean(editingJrChannel);
+      const url = isEdit
+        ? `${API_URL}/admin/join-request-channels/${editingJrChannel!.id}`
+        : `${API_URL}/admin/join-request-channels`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify({
+          channelId: newJrChannelId.trim(),
+          title: newJrTitle.trim(),
+          inviteLink: newJrInviteLink.trim() || null,
+          customMessage: newJrCustomMsg.trim() || null
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setShowAddJrModal(false);
+        setEditingJrChannel(null);
+        setNewJrChannelId('');
+        setNewJrTitle('');
+        setNewJrInviteLink('');
+        setNewJrCustomMsg('');
+        fetchJoinRequestStats();
+      } else {
+        alert(data.error || "Xatolik yuz berdi");
+      }
+    } catch (err) {
+      alert("Server bilan bog'lanishda xatolik");
+    } finally {
+      setSavingJrChannel(false);
+    }
+  };
+
+  const handleDeleteJrChannel = async (id: number) => {
+    if (!confirm("Haqiqatan ham bu zayavka kanalini o'chirmoqchimisiz?")) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/join-request-channels/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (res.ok) {
+        fetchJoinRequestStats();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "O'chirishda xatolik");
+      }
+    } catch {
+      alert("Xatolik");
+    }
+  };
+
+  const handleApproveJoinRequests = async (channelId?: string) => {
+    const isSingle = Boolean(channelId && channelId !== 'all');
+    const targetName = isSingle
+      ? (joinRequestChannels.find(c => c.channelId === channelId)?.title || channelId)
+      : "barcha kanallardagi";
+
+    if (!confirm(`Haqiqatan ham ${targetName} zayavkalarni qabul qilmoqchimisiz?`)) {
       return;
     }
 
-    setApprovingJoinRequests(true);
+    if (isSingle) {
+      setApprovingChannelId(channelId!);
+    } else {
+      setApprovingJoinRequests(true);
+    }
+
     try {
       const res = await fetch(`${API_URL}/admin/join-requests/approve-all`, {
         method: 'POST',
-        headers
+        headers,
+        body: JSON.stringify(isSingle ? { channelId } : { channelId: 'all' })
       });
       const data = await res.json();
       if (data.success) {
-        alert(`✅ Muvaffaqiyatli: ${data.approvedCount} ta foydalanuvchi kanalga qo'shildi!${data.failedCount > 0 ? ` (${data.failedCount} tasida xato/allaqachon a'zo)` : ''}`);
+        alert(`✅ Muvaffaqiyatli: ${data.approvedCount} ta foydalanuvchi qabul qilindi!${data.failedCount > 0 ? ` (${data.failedCount} tasida xato/allaqachon a'zo)` : ''}`);
         fetchJoinRequestStats();
       } else {
         alert(data.error || "Xatolik yuz berdi");
@@ -395,6 +504,7 @@ export default function AdminView() {
       console.error(err);
       alert("Server bilan bog'lanishda xatolik yuz berdi");
     } finally {
+      setApprovingChannelId(null);
       setApprovingJoinRequests(false);
     }
   };
@@ -810,32 +920,53 @@ export default function AdminView() {
 
 
 
-              <div style={{ marginTop: '20px', marginBottom: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#3b82f6', margin: 0 }}>📩 Zayavka (Join Request) Sozlamalari</h3>
-                  <span style={{ 
-                    padding: '3px 10px', 
-                    borderRadius: '12px', 
-                    fontSize: '11px', 
-                    fontWeight: '700',
-                    background: joinRequestsCount > 0 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                    color: joinRequestsCount > 0 ? '#60a5fa' : 'var(--text-muted)',
-                    border: '1px solid ' + (joinRequestsCount > 0 ? '#3b82f6' : 'rgba(255,255,255,0.1)')
-                  }}>
-                    ⚡ Kutilmoqda: {joinRequestsCount} ta
-                  </span>
+              <div style={{ marginTop: '24px', marginBottom: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#3b82f6', margin: 0 }}>
+                      📩 Zayavka (Join Request) Kanallari
+                    </h3>
+                    <span style={{ 
+                      padding: '2px 8px', 
+                      borderRadius: '10px', 
+                      fontSize: '11px', 
+                      fontWeight: '700',
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      border: '1px solid #3b82f6'
+                    }}>
+                      {joinRequestChannels.length} ta kanal
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={openAddJrModal}
+                    className="neon-btn"
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Plus size={14} /> Kanal qo'shish
+                  </button>
                 </div>
-                <p style={{ fontSize: '11px', opacity: 0.6, marginBottom: '14px' }}>
-                  Maxfiy kanalga qo'shilish so'rovi yuborilganda bot foydalanuvchini kanalga qo'shmasdan xabar yuboradi. Barcha zayafkalarni bitta tugma orqali birdaniga qabul qilishingiz mumkin.
+
+                <p style={{ fontSize: '11px', opacity: 0.65, marginBottom: '14px', lineHeight: '1.4' }}>
+                  Ushbu kanallarga so'rov yuborilganda bot foydalanuvchini darhol qabul qilmasdan, unga xabar yuboradi. Barcha zayavkalarni istalgan paytda bir bosishda qabul qilishingiz mumkin.
                 </p>
 
-                {/* Mass approve card */}
+                {/* Mass approve all card */}
                 <div style={{ 
-                  marginBottom: '18px', 
+                  marginBottom: '16px', 
                   background: 'rgba(59, 130, 246, 0.08)', 
                   border: '1px solid rgba(59, 130, 246, 0.25)', 
-                  borderRadius: '10px', 
-                  padding: '12px 14px',
+                  borderRadius: '12px', 
+                  padding: '12px 16px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -844,7 +975,7 @@ export default function AdminView() {
                 }}>
                   <div>
                     <div style={{ fontWeight: '600', fontSize: '13px' }}>
-                      Kutilayotgan zayavkalar: <span style={{ color: '#60a5fa', fontWeight: '700', fontSize: '14px' }}>{joinRequestsCount}</span> ta
+                      Jami kutilayotgan zayavkalar: <span style={{ color: '#60a5fa', fontWeight: '700', fontSize: '15px' }}>{joinRequestsCount}</span> ta
                     </div>
                     <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '2px' }}>
                       Real-time yangilanadi (har 5 soniyada)
@@ -854,49 +985,149 @@ export default function AdminView() {
                     type="button"
                     className="neon-btn"
                     style={{ 
-                      background: joinRequestsCount > 0 ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'rgba(255,255,255,0.1)',
+                      background: joinRequestsCount > 0 ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'rgba(255,255,255,0.08)',
                       cursor: joinRequestsCount > 0 && !approvingJoinRequests ? 'pointer' : 'not-allowed',
                       padding: '8px 16px',
                       fontSize: '12px'
                     }}
                     disabled={joinRequestsCount === 0 || approvingJoinRequests}
-                    onClick={handleApproveAllJoinRequests}
+                    onClick={() => handleApproveJoinRequests('all')}
                   >
                     {approvingJoinRequests ? (
                       <div className="spinner" style={{ width: '14px', height: '14px' }}></div>
                     ) : (
-                      <>✅ Barchasini qabul qilish ({joinRequestsCount})</>
+                      <>✅ Barcha zayavkalarni qabul qilish ({joinRequestsCount})</>
                     )}
                   </button>
                 </div>
+
+                {/* Channels List */}
+                {joinRequestChannels.length === 0 ? (
+                  <div style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px dashed rgba(255,255,255,0.15)',
+                    borderRadius: '12px',
+                    color: 'var(--text-muted)',
+                    fontSize: '13px',
+                    marginBottom: '18px'
+                  }}>
+                    Hozircha zayavka kanallari qo'shilmagan. Yuqoridagi <b>"+ Kanal qo'shish"</b> tugmasi orqali kanallarni ulang.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
+                    {joinRequestChannels.map((ch) => (
+                      <div 
+                        key={ch.id} 
+                        className="credit-card-item"
+                        style={{
+                          padding: '14px 16px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '12px',
+                          background: 'rgba(20, 24, 38, 0.7)',
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          borderRadius: '12px'
+                        }}
+                      >
+                        <div style={{ flex: '1 1 200px' }}>
+                          <div style={{ fontWeight: '700', fontSize: '14px', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>📢 {ch.title}</span>
+                            <span style={{ 
+                              fontSize: '11px', 
+                              padding: '2px 8px', 
+                              borderRadius: '8px',
+                              background: (ch.pendingCount || 0) > 0 ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.06)',
+                              color: (ch.pendingCount || 0) > 0 ? '#60a5fa' : 'var(--text-muted)',
+                              fontWeight: '600'
+                            }}>
+                              ⚡ {(ch.pendingCount || 0)} ta zayavka
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '4px', fontFamily: 'monospace' }}>
+                            ID: {ch.channelId}
+                          </div>
+                          {ch.inviteLink && (
+                            <div style={{ fontSize: '11px', color: '#38bdf8', marginTop: '2px', wordBreak: 'break-all' }}>
+                              🔗 {ch.inviteLink}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveJoinRequests(ch.channelId)}
+                            disabled={(ch.pendingCount || 0) === 0 || approvingChannelId === ch.channelId}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(59, 130, 246, 0.4)',
+                              background: (ch.pendingCount || 0) > 0 ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : 'rgba(255,255,255,0.05)',
+                              color: (ch.pendingCount || 0) > 0 ? '#fff' : 'rgba(255,255,255,0.3)',
+                              cursor: (ch.pendingCount || 0) > 0 && approvingChannelId !== ch.channelId ? 'pointer' : 'not-allowed',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            {approvingChannelId === ch.channelId ? (
+                              <div className="spinner" style={{ width: '12px', height: '12px' }}></div>
+                            ) : (
+                              <>✅ Qabul qilish ({ch.pendingCount || 0})</>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openEditJrModal(ch)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '11px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              background: 'rgba(255,255,255,0.06)',
+                              color: '#fff',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Edit2 size={12} /> Tahrirlash
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteJrChannel(ch.id)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '11px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: '#f87171',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Zayavka Kanal ID</label>
-                <input 
-                  className="cyber-input" 
-                  style={{ width: '100%' }}
-                  placeholder="-100..." 
-                  value={settings.joinRequestChannelId || ''} 
-                  onChange={e => setSettings({...settings, joinRequestChannelId: e.target.value})} 
-                />
-                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Maxfiy kanalning ID raqami. Bot ushbu kanalda admin bo'lishi shart.</p>
-              </div>
-
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Kanal havolasi</label>
-                <input 
-                  className="cyber-input" 
-                  style={{ width: '100%' }}
-                  placeholder="https://t.me/+abc123" 
-                  value={settings.joinRequestLink || ''} 
-                  onChange={e => setSettings({...settings, joinRequestLink: e.target.value})} 
-                />
-                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>Kanalga qo'shilish uchun havola (join request bilan).</p>
-              </div>
-
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>Foydalanuvchiga yuboriladigan xabar</label>
+                <label style={{ fontSize: '12px', opacity: 0.8, display: 'block', marginBottom: '5px' }}>
+                  Foydalanuvchiga yuboriladigan umumiy xabar
+                </label>
                 <textarea 
                   className="cyber-input" 
                   style={{ width: '100%', minHeight: '80px', resize: 'vertical' }}
@@ -904,7 +1135,9 @@ export default function AdminView() {
                   value={settings.joinRequestMessage || ''} 
                   onChange={e => setSettings({...settings, joinRequestMessage: e.target.value})} 
                 />
-                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>HTML formatda yozishingiz mumkin. Bo'sh qoldirsangiz standart xabar yuboriladi.</p>
+                <p style={{ fontSize: '11px', opacity: 0.6, marginTop: '5px' }}>
+                  HTML formatda yozishingiz mumkin. Rasm/video bilan sozlash uchun esa botga <b>/setjoinmsg</b> buyrug'ini yuboring.
+                </p>
               </div>
 
               <button type="submit" className="neon-btn" disabled={savingSettings}>
@@ -983,6 +1216,109 @@ export default function AdminView() {
                     }
                   }}
                 >+ Qo'shish</button>
+              </div>
+            )}
+
+            {/* Add / Edit Join Request Channel Modal */}
+            {showAddJrModal && (
+              <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '20px'
+              }}>
+                <div style={{
+                  background: '#141623', border: '1px solid rgba(59, 130, 246, 0.4)',
+                  borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%',
+                  boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#60a5fa', margin: 0 }}>
+                      {editingJrChannel ? '✏️ Zayavka kanalini tahrirlash' : '➕ Yangi Zayavka kanal ulash'}
+                    </h3>
+                    <button 
+                      onClick={() => { setShowAddJrModal(false); setEditingJrChannel(null); }} 
+                      style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}
+                    >✕</button>
+                  </div>
+
+                  <form onSubmit={handleSaveJrChannel} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                        Kanal ID raqami *
+                      </label>
+                      <input 
+                        className="cyber-input" 
+                        style={{ width: '100%' }} 
+                        required
+                        placeholder="-100123456789"
+                        value={newJrChannelId} 
+                        onChange={e => setNewJrChannelId(e.target.value)} 
+                      />
+                      <p style={{ fontSize: '10px', opacity: 0.6, margin: '4px 0 0 0' }}>
+                        Bot ushbu kanalda admin bo'lishi va zayavkalarni ko'ra olishi shart.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                        Kanal nomi (ixtiyoriy)
+                      </label>
+                      <input 
+                        className="cyber-input" 
+                        style={{ width: '100%' }} 
+                        placeholder="Masalan: VIP Kanal 1"
+                        value={newJrTitle} 
+                        onChange={e => setNewJrTitle(e.target.value)} 
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                        Kanalga havola (ixtiyoriy)
+                      </label>
+                      <input 
+                        className="cyber-input" 
+                        style={{ width: '100%' }} 
+                        placeholder="https://t.me/+abc123..."
+                        value={newJrInviteLink} 
+                        onChange={e => setNewJrInviteLink(e.target.value)} 
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                        Ushbu kanal uchun maxsus xabar (ixtiyoriy)
+                      </label>
+                      <textarea 
+                        className="cyber-input" 
+                        style={{ width: '100%', minHeight: '60px', resize: 'vertical' }} 
+                        placeholder="Bo'sh qoldirilsa, umumiy xabar yuboriladi"
+                        value={newJrCustomMsg} 
+                        onChange={e => setNewJrCustomMsg(e.target.value)} 
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                      <button 
+                        type="button" 
+                        onClick={() => { setShowAddJrModal(false); setEditingJrChannel(null); }} 
+                        className="neon-btn" 
+                        style={{ flex: 1, background: 'rgba(255,255,255,0.08)' }}
+                      >
+                        Bekor qilish
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="neon-btn" 
+                        disabled={savingJrChannel}
+                        style={{ flex: 1, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}
+                      >
+                        {savingJrChannel ? <div className="spinner"></div> : 'Saqlash'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
           </div>

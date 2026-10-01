@@ -654,11 +654,21 @@ bot.on('chat_join_request', async (ctx) => {
   console.log(`[Join Request] User ${userId} requested to join channel ${channelId} (${channelTitle})`);
 
   try {
-    // 1. Check if this is the "joinRequest" channel from Settings (send message WITHOUT approving)
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    if (settings?.joinRequestChannelId && settings.joinRequestChannelId === channelId) {
+    // 1. Check if this is one of our Zayavka channels (from JoinRequestChannel or legacy Settings)
+    const [jrChannel, settings] = await Promise.all([
+      (prisma as any).joinRequestChannel.findUnique({ where: { channelId } }),
+      prisma.settings.findUnique({ where: { id: 1 } })
+    ]);
+
+    const isZayavkaChannel = Boolean(
+      jrChannel || 
+      (settings?.joinRequestChannelId && settings.joinRequestChannelId === channelId)
+    );
+
+    if (isZayavkaChannel) {
+      const displayTitle = jrChannel?.title || channelTitle;
       // Do NOT approve — just send a message to the user
-      console.log(`[Join Request] User ${userId} requested to join ${channelId} — sending message (not approving)`);
+      console.log(`[Join Request] User ${userId} requested to join ${channelId} (${displayTitle}) — sending message (not approving)`);
 
       // Save user to DB
       const user = ctx.chatJoinRequest.from;
@@ -677,26 +687,27 @@ bot.on('chat_join_request', async (ctx) => {
 
       // Send custom message (photo/video/text) with inline button
       const botInfo = await bot.telegram.getMe();
-      const caption = settings.joinRequestMessage
-        || `🎉 Salom! "${channelTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
+      const customMsg = jrChannel?.customMessage || settings?.joinRequestMessage;
+      const caption = customMsg
+        || `🎉 Salom! "${displayTitle}" kanaliga xush kelibsiz!\n\nBotimiz orqali VIP obuna sotib olishingiz mumkin.`;
       const replyMarkup = {
         inline_keyboard: [[{ text: '📲 KANALGA KIRISH', url: `https://t.me/${botInfo.username}?start=start` }]]
       };
 
       try {
-        if (settings.joinRequestMediaType === 'photo' && settings.joinRequestMediaFileId) {
+        if (settings?.joinRequestMediaType === 'photo' && settings?.joinRequestMediaFileId) {
           await bot.telegram.sendPhoto(userId, settings.joinRequestMediaFileId, {
             caption,
             parse_mode: 'HTML',
             reply_markup: replyMarkup
           });
-        } else if (settings.joinRequestMediaType === 'video' && settings.joinRequestMediaFileId) {
+        } else if (settings?.joinRequestMediaType === 'video' && settings?.joinRequestMediaFileId) {
           await bot.telegram.sendVideo(userId, settings.joinRequestMediaFileId, {
             caption,
             parse_mode: 'HTML',
             reply_markup: replyMarkup
           });
-        } else if (settings.joinRequestMediaType === 'animation' && settings.joinRequestMediaFileId) {
+        } else if (settings?.joinRequestMediaType === 'animation' && settings?.joinRequestMediaFileId) {
           await bot.telegram.sendAnimation(userId, settings.joinRequestMediaFileId, {
             caption,
             parse_mode: 'HTML',

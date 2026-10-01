@@ -500,36 +500,219 @@ app.post('/api/admin/settings', requireAdmin, async (req, res) => {
   }
 });
 
-// Get pending join requests count (real-time)
-app.get('/api/admin/join-requests/stats', requireAdmin, async (req, res) => {
+// Helper: sync legacy settings joinRequestChannelId to joinRequestChannel table
+async function syncLegacyJoinRequestChannel() {
   try {
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    if (!settings?.joinRequestChannelId) {
-      return res.json({ count: 0 });
+    if (settings?.joinRequestChannelId) {
+      const existing = await (prisma as any).joinRequestChannel.findUnique({
+        where: { channelId: settings.joinRequestChannelId }
+      });
+      if (!existing) {
+        let title = 'Asosiy Zayavka Kanal';
+        try {
+          const chat = await bot.telegram.getChat(settings.joinRequestChannelId);
+          if ((chat as any).title) title = (chat as any).title;
+        } catch {}
+        await (prisma as any).joinRequestChannel.create({
+          data: {
+            channelId: settings.joinRequestChannelId,
+            title,
+            inviteLink: settings.joinRequestLink || null
+          }
+        });
+      }
     }
+  } catch {}
+}
+
+// --- Join Request Channels CRUD ---
+
+// Get all join request channels with pending count
+app.get('/api/admin/join-request-channels', requireAdmin, async (_req, res) => {
+  try {
+    await syncLegacyJoinRequestChannel();
+    const channels = await (prisma as any).joinRequestChannel.findMany({
+      orderBy: { id: 'asc' }
+    });
+
+    // Count pending join requests for each channel
+    const channelIds = channels.map((c: any) => c.channelId);
+    const countMap: Record<string, number> = {};
+    let totalPending = 0;
+
+    if (channelIds.length > 0) {
+      const pendingCounts = await prisma.joinRequest.groupBy({
+        by: ['channelId'],
+        where: {
+          channelId: { in: channelIds },
+          status: 'PENDING'
+        },
+        _count: { id: true }
+      });
+
+      for (const p of pendingCounts) {
+        countMap[p.channelId] = p._count.id;
+        totalPending += p._count.id;
+      }
+    }
+
+    const result = channels.map((ch: any) => ({
+      ...ch,
+      pendingCount: countMap[ch.channelId] || 0
+    }));
+
+    res.json({ channels: result, totalPending });
+  } catch (err) {
+    console.error('get join-request-channels error:', err);
+    res.status(500).json({ error: 'Failed to fetch join request channels' });
+  }
+});
+
+// Add a new join request channel
+app.post('/api/admin/join-request-channels', requireAdmin, async (req, res) => {
+  try {
+    const { channelId, title, inviteLink, customMessage } = req.body;
+    if (!channelId) {
+      return res.status(400).json({ error: 'Kanal ID kiritilishi shart' });
+    }
+
+    const cleanChannelId = String(channelId).trim();
+    let finalTitle = title ? String(title).trim() : '';
+
+    if (!finalTitle) {
+      try {
+        const chat = await bot.telegram.getChat(cleanChannelId);
+        if ((chat as any).title) finalTitle = (chat as any).title;
+      } catch {}
+      if (!finalTitle) finalTitle = `Kanal ${cleanChannelId}`;
+    }
+
+    const created = await (prisma as any).joinRequestChannel.create({
+      data: {
+        channelId: cleanChannelId,
+        title: finalTitle,
+        inviteLink: inviteLink ? String(inviteLink).trim() : null,
+        customMessage: customMessage ? String(customMessage).trim() : null
+      }
+    });
+
+    res.json(created);
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      return res.status(400).json({ error: 'Bu kanal ID allaqachon mavjud' });
+    }
+    console.error('create join-request-channel error:', err);
+    res.status(500).json({ error: 'Failed to create join request channel' });
+  }
+});
+
+// Update join request channel
+app.put('/api/admin/join-request-channels/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { channelId, title, inviteLink, customMessage } = req.body;
+
+    const data: any = {};
+    if (channelId !== undefined) data.channelId = String(channelId).trim();
+    if (title !== undefined) data.title = String(title).trim();
+    if (inviteLink !== undefined) data.inviteLink = inviteLink ? String(inviteLink).trim() : null;
+    if (customMessage !== undefined) data.customMessage = customMessage ? String(customMessage).trim() : null;
+
+    const updated = await (prisma as any).joinRequestChannel.update({
+      where: { id },
+      data
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      return res.status(400).json({ error: 'Bu kanal ID boshqa kanalda ishlatilmoqda' });
+    }
+    console.error('update join-request-channel error:', err);
+    res.status(500).json({ error: 'Failed to update join request channel' });
+  }
+});
+
+// Delete join request channel
+app.delete('/api/admin/join-request-channels/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await (prisma as any).joinRequestChannel.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('delete join-request-channel error:', err);
+    res.status(500).json({ error: 'Failed to delete join request channel' });
+  }
+});
+
+// Get pending join requests count (real-time, across all channels)
+app.get('/api/admin/join-requests/stats', requireAdmin, async (_req, res) => {
+  try {
+    await syncLegacyJoinRequestChannel();
+    const channels = await (prisma as any).joinRequestChannel.findMany();
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+
+    const channelIds = new Set<string>();
+    for (const c of channels) channelIds.add(c.channelId);
+    if (settings?.joinRequestChannelId) channelIds.add(settings.joinRequestChannelId);
+
+    const channelIdList = Array.from(channelIds);
+    if (channelIdList.length === 0) {
+      return res.json({ count: 0, channelCounts: {} });
+    }
+
     const count = await prisma.joinRequest.count({
       where: {
-        channelId: settings.joinRequestChannelId,
+        channelId: { in: channelIdList },
         status: 'PENDING'
       }
     });
-    res.json({ count });
+
+    const pendingCounts = await prisma.joinRequest.groupBy({
+      by: ['channelId'],
+      where: {
+        channelId: { in: channelIdList },
+        status: 'PENDING'
+      },
+      _count: { id: true }
+    });
+
+    const channelCounts: Record<string, number> = {};
+    for (const p of pendingCounts) {
+      channelCounts[p.channelId] = p._count.id;
+    }
+
+    res.json({ count, channelCounts });
   } catch (err) {
     console.error('join-requests stats error:', err);
     res.status(500).json({ error: 'Failed to get join requests stats' });
   }
 });
 
-// Mass approve all pending join requests
+// Mass approve pending join requests (for all channels or single channel)
 app.post('/api/admin/join-requests/approve-all', requireAdmin, async (req, res) => {
   try {
+    const targetChannelId = req.body?.channelId;
+    const channels = await (prisma as any).joinRequestChannel.findMany();
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    if (!settings?.joinRequestChannelId) {
-      return res.status(400).json({ error: 'Zayavka kanali sozlanmagan' });
+
+    const channelIds = new Set<string>();
+    if (targetChannelId && targetChannelId !== 'all') {
+      channelIds.add(String(targetChannelId));
+    } else {
+      for (const c of channels) channelIds.add(c.channelId);
+      if (settings?.joinRequestChannelId) channelIds.add(settings.joinRequestChannelId);
     }
+
+    const channelIdList = Array.from(channelIds);
+    if (channelIdList.length === 0) {
+      return res.status(400).json({ error: 'Zayavka kanallari topilmadi' });
+    }
+
     const pending = await prisma.joinRequest.findMany({
       where: {
-        channelId: settings.joinRequestChannelId,
+        channelId: { in: channelIdList },
         status: 'PENDING'
       }
     });
@@ -549,10 +732,10 @@ app.post('/api/admin/join-requests/approve-all', requireAdmin, async (req, res) 
           data: { status: 'APPROVED' }
         });
         approvedCount++;
-        // Rate limiting oldini olish uchun 40ms kutish
-        await new Promise(resolve => setTimeout(resolve, 40));
+        // Rate limiting oldini olish uchun 35ms kutish
+        await new Promise(resolve => setTimeout(resolve, 35));
       } catch (e: any) {
-        console.error(`Approve error for user ${item.userId}:`, e?.message || e);
+        console.error(`Approve error for user ${item.userId} in channel ${item.channelId}:`, e?.message || e);
         await prisma.joinRequest.update({
           where: { id: item.id },
           data: { status: 'PROCESSED' }
