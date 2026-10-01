@@ -72,6 +72,8 @@ export default function AdminView() {
   const [newGiftPrice, setNewGiftPrice] = useState('');
   const [newGiftAnim, setNewGiftAnim] = useState('bounce');
   const [savingGift, setSavingGift] = useState(false);
+  const [adminDonations, setAdminDonations] = useState<any[]>([]);
+  const [loadingDonations, setLoadingDonations] = useState(false);
 
   // Broadcast
   const [broadcastText, setBroadcastText] = useState('');
@@ -664,9 +666,50 @@ export default function AdminView() {
     }
   };
 
+  const fetchAdminDonations = async () => {
+    try {
+      setLoadingDonations(true);
+      const res = await fetch(`${API_URL}/admin/donations`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminDonations(data.donations || []);
+      }
+    } catch {} finally {
+      setLoadingDonations(false);
+    }
+  };
+
+  const handleConfirmDonation = async (id: number) => {
+    if (!confirm('Ushbu donat to\'lovini tasdiqlamoqchimisiz? (30 soniyada efirga chiqadi)')) return;
+    try {
+      const res = await fetch(`${API_URL}/live/donate/confirm/${id}`, {
+        method: 'POST',
+        headers
+      });
+      if (res.ok) {
+        alert('✅ Donat tasdiqlandi!');
+        fetchAdminDonations();
+      }
+    } catch {}
+  };
+
+  const handleCancelDonation = async (id: number) => {
+    if (!confirm('Ushbu donatni bekor qilmoqchimisiz?')) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/donations/${id}/cancel`, {
+        method: 'POST',
+        headers
+      });
+      if (res.ok) {
+        fetchAdminDonations();
+      }
+    } catch {}
+  };
+
   const fetchStreamersAndLive = async () => {
     try {
       fetchAdminGifts();
+      fetchAdminDonations();
       const [stRes, liveRes] = await Promise.all([
         fetch(`${API_URL}/admin/streamers`, { headers }),
         fetch(`${API_URL}/live/status`)
@@ -1395,6 +1438,125 @@ export default function AdminView() {
                   {savingGift ? 'Qo\'shilmoqda...' : '➕ Yangi sovg\'ani qo\'shish'}
                 </button>
               </form>
+
+              {/* Live Donations List Table */}
+              <div style={{ marginTop: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: '800', color: '#fef08a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    💎 Jonli Donatlar va To'lovlar Ro'yxati
+                    <span style={{ fontSize: '11px', background: 'rgba(245, 158, 11, 0.2)', color: '#fef08a', padding: '2px 8px', borderRadius: '10px' }}>
+                      {adminDonations.length} ta
+                    </span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={fetchAdminDonations}
+                    disabled={loadingDonations}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: '#fff',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔄 Yangilash
+                  </button>
+                </div>
+
+                {adminDonations.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', fontSize: '12px' }}>
+                    Hozircha donat to'lovlari kelib tushmagan
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {adminDonations.map((d: any) => (
+                      <div
+                        key={d.id}
+                        className="cyber-card"
+                        style={{
+                          padding: '12px 14px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '12px',
+                          flexWrap: 'wrap',
+                          borderLeft: d.status === 'PAID' ? '4px solid #22c55e' : d.status === 'DISPLAYED' ? '4px solid #38bdf8' : d.status === 'PENDING' ? '4px solid #f59e0b' : '4px solid #ef4444'
+                        }}
+                      >
+                        <div style={{ minWidth: '180px', flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                            <span style={{ fontSize: '18px' }}>{d.giftIcon || '🎁'}</span>
+                            <span style={{ fontWeight: '800', color: '#fff', fontSize: '13px' }}>{d.userName || 'Mehmon'}</span>
+                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>ID: {d.userId}</span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#fef08a', fontWeight: '800' }}>
+                            {d.giftName} — {Number(d.amount).toLocaleString()} so'm
+                          </div>
+                          {d.message && (
+                            <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', marginTop: '2px' }}>
+                              "{d.message}"
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            padding: '3px 8px',
+                            borderRadius: '8px',
+                            background: d.status === 'PAID' ? 'rgba(34, 197, 94, 0.2)' : d.status === 'DISPLAYED' ? 'rgba(56, 189, 248, 0.2)' : d.status === 'PENDING' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                            color: d.status === 'PAID' ? '#4ade80' : d.status === 'DISPLAYED' ? '#38bdf8' : d.status === 'PENDING' ? '#fde047' : '#f87171'
+                          }}>
+                            {d.status === 'PAID' ? '✅ To\'langan (30s)' : d.status === 'DISPLAYED' ? '📺 Efirda chiqdi' : d.status === 'PENDING' ? '⏳ Kutilmoqda' : '❌ Bekor qilingan'}
+                          </span>
+
+                          {d.status === 'PENDING' && (
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmDonation(d.id)}
+                                style={{
+                                  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                                  border: 'none',
+                                  color: '#fff',
+                                  padding: '5px 10px',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: '800',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ✅ Tasdiqlash
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelDonation(d.id)}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.2)',
+                                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                                  color: '#f87171',
+                                  padding: '5px 8px',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

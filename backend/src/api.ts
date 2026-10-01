@@ -4,7 +4,7 @@ import compression from 'compression';
 import NodeCache from 'node-cache';
 import { Markup } from 'telegraf';
 import { prisma } from './prisma';
-import { bot } from './bot';
+import { bot, confirmLiveDonation, recentChannelPosts, textContainsAmount, isAdmin } from './bot';
 
 import path from 'path';
 import fs from 'fs';
@@ -1673,11 +1673,45 @@ app.post('/api/live/donate/check/:donationId', async (req, res) => {
       });
     }
 
-    // Still pending
+    // If still PENDING:
+    // 1. Check in-memory recent channel SMS posts (recovers payments that arrived before/during page interaction)
+    const matchingPost = recentChannelPosts.find(p => 
+      textContainsAmount(p.text, donation.amount) || p.numbers.includes(donation.amount)
+    );
+
+    if (matchingPost) {
+      console.log(`[DONATION CHECK] Found matching SMS in recentChannelPosts for donation #${donation.id} (${donation.amount} UZS)`);
+      const ok = await confirmLiveDonation(donation.id, 'RECENT_SMS_MATCH');
+      if (ok) {
+        return res.json({
+          success: true,
+          status: 'PAID',
+          displayInSeconds: 30
+        });
+      }
+    }
+
+    // 2. Admin test bypass: if the sender is admin or adminBypass flag is passed by an admin user
+    const isUserAdmin = isAdmin(String(donation.userId));
+    if (req.body?.adminBypass && isUserAdmin) {
+      console.log(`[DONATION CHECK] Admin bypass triggered for donation #${donation.id} by admin ${donation.userId}`);
+      const ok = await confirmLiveDonation(donation.id, 'ADMIN_TEST_BYPASS');
+      if (ok) {
+        return res.json({
+          success: true,
+          status: 'PAID',
+          displayInSeconds: 30,
+          isAdminBypass: true
+        });
+      }
+    }
+
+    // 3. Still pending — provide clear status and inform that photo receipt can also be sent to bot
     res.json({
       success: false,
       status: 'PENDING',
-      message: 'To\'lov hali tizimda ko\'rinmadi. Iltimos 10-15 soniya kuting yoki qayta tekshiring.'
+      isAdminUser: isUserAdmin,
+      message: 'To\'lov hali bank tizimi orqali tasdiqlanmadi (odatda 10-30 soniya vaqt oladi). Agar to\'lov qilgan bo\'lsangiz, botga to\'lov chekini (skrinshotini) yuborishingiz mumkin.'
     });
   } catch (err) {
     console.error('check donation error:', err);
@@ -1685,32 +1719,46 @@ app.post('/api/live/donate/check/:donationId', async (req, res) => {
   }
 });
 
-// 4. Manual confirm donation (for admin/instant confirmation)
+// 4. Manual confirm donation (for admin or instant confirmation)
 app.post('/api/live/donate/confirm/:donationId', async (req, res) => {
   try {
     const donationId = Number(req.params.donationId);
-    const donation = await (prisma as any).liveDonation.findUnique({
-      where: { id: donationId }
-    });
-
-    if (!donation) return res.status(404).json({ error: 'Topilmadi' });
-
-    const paidAt = new Date();
-    const displayAt = new Date(Date.now() + 30000);
-
-    await (prisma as any).liveDonation.update({
-      where: { id: donationId },
-      data: { status: 'PAID', paidAt, displayAt }
-    });
-
-    // Schedule 30-second broadcast via event emitter & direct timeout
-    setTimeout(() => {
-      donationEvents.emit('trigger_display', donationId);
-    }, 30000);
-
-    res.json({ success: true, displayInSeconds: 30 });
+    const ok = await confirmLiveDonation(donationId, 'MANUAL_API');
+    if (ok) {
+      res.json({ success: true, displayInSeconds: 30 });
+    } else {
+      res.status(404).json({ error: 'Donat topilmadi yoki tasdiqlab bo\'lmadi' });
+    }
   } catch (err) {
     res.status(500).json({ error: 'Confirm error' });
+  }
+});
+
+// 5. Admin: Get recent live donations list
+app.get('/api/admin/donations', requireAdmin, async (_req, res) => {
+  try {
+    const donations = await (prisma as any).liveDonation.findMany({
+      take: 50,
+      orderBy: { id: 'desc' }
+    });
+    res.json({ donations });
+  } catch (err) {
+    console.error('get admin donations error:', err);
+    res.status(500).json({ error: 'Donatlarni yuklashda xatolik' });
+  }
+});
+
+// 6. Admin: Cancel donation
+app.post('/api/admin/donations/:id/cancel', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await (prisma as any).liveDonation.update({
+      where: { id },
+      data: { status: 'CANCELLED' }
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Donatni bekor qilishda xatolik' });
   }
 });
 

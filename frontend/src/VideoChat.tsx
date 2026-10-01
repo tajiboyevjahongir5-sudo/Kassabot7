@@ -198,6 +198,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [creatingDonation, setCreatingDonation] = useState<boolean>(false);
   const [checkingDonation, setCheckingDonation] = useState<boolean>(false);
   const [checkErrorMessage, setCheckErrorMessage] = useState<string | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
   const [copiedCard, setCopiedCard] = useState<boolean>(false);
   const [countdownSeconds, setCountdownSeconds] = useState<number>(30);
   const [currentDonationAlert, setCurrentDonationAlert] = useState<any | null>(null);
@@ -1333,16 +1334,20 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     }
   };
 
-  const handleCheckPayment = async () => {
+  const handleCheckPayment = async (adminBypass: boolean = false) => {
     if (!donationPaymentData?.donationId) return;
     setCheckingDonation(true);
     setCheckErrorMessage(null);
     try {
       const res = await fetch(`${API_URL}/live/donate/check/${donationPaymentData.donationId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminBypass })
       });
       const data = await res.json();
+      if (data.isAdminUser) {
+        setIsAdminUser(true);
+      }
       if (data.success) {
         setDonationStep('success');
         const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 30;
@@ -2667,14 +2672,14 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                     marginBottom: '12px',
                     lineHeight: '1.4'
                   }}>
-                    {checkErrorMessage}
+                    <div>{checkErrorMessage}</div>
                   </div>
                 )}
 
                 {/* To'lov qildim tugmasi */}
                 <button
                   type="button"
-                  onClick={handleCheckPayment}
+                  onClick={() => handleCheckPayment(false)}
                   disabled={checkingDonation}
                   style={{
                     width: '100%',
@@ -2704,6 +2709,33 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                     </>
                   )}
                 </button>
+
+                {/* Admin Test Bypass Button (Agar admin bo'lsa bir zumda tasdiqlash uchun) */}
+                {isAdminUser && (
+                  <button
+                    type="button"
+                    onClick={() => handleCheckPayment(true)}
+                    disabled={checkingDonation}
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '10px',
+                      borderRadius: '10px',
+                      border: '1px dashed #f59e0b',
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      color: '#fef08a',
+                      fontWeight: '700',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>⚡ Admin Test: To'lovni darhol tasdiqlash</span>
+                  </button>
+                )}
               </div>
             )}
 

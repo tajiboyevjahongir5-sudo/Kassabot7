@@ -16,7 +16,7 @@ function getAdminIds(): string[] {
   return adminId.split(',').map(id => id.trim()).filter(id => id.length > 0);
 }
 
-function isAdmin(userId: string): boolean {
+export function isAdmin(userId: string): boolean {
   const adminIds = getAdminIds();
   return adminIds.includes(userId);
 }
@@ -342,6 +342,34 @@ bot.command('help', async (ctx) => {
 
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
 
+// Universal number & amount matching for Uzbekistan SMS gateways & bank receipts
+export interface ChannelPostLog {
+  text: string;
+  numbers: number[];
+  timestamp: number;
+}
+
+// In-memory ring buffer of recent channel posts (last 100 messages) to prevent missed payments on async check
+export const recentChannelPosts: ChannelPostLog[] = [];
+
+export function textContainsAmount(text: string, amount: number): boolean {
+  if (!text || !amount) return false;
+  const cleanText = text.replace(/[\u202F\u00A0\s]+/g, ' ').trim();
+  const str = String(amount);
+  const withSpaces = str.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // "5 935"
+  const withCommas = str.replace(/\B(?=(\d{3})+(?!\d))/g, ','); // "5,935"
+  const withDots = str.replace(/\B(?=(\d{3})+(?!\d))/g, '.');   // "5.935"
+
+  const patterns = [
+    new RegExp(`(?:^|\\D)${str}(?:[.,]00)?(?:\\D|$)`),
+    new RegExp(`(?:^|\\D)${withSpaces.replace(/ /g, '\\s+')}(?:[.,]00)?(?:\\D|$)`),
+    new RegExp(`(?:^|\\D)${withCommas.replace(/,/g, '[,.]')}(?:[.,]00)?(?:\\D|$)`),
+    new RegExp(`(?:^|\\D)${withDots.replace(/\./g, '[,.]')}(?:[.,]00)?(?:\\D|$)`)
+  ];
+
+  return patterns.some(p => p.test(cleanText));
+}
+
 function extractNumbers(text: string): number[] {
   // Remove decimal .00, ,00 or two-digit cents like .50
   let temp = text.replace(/[,.]\d{2}\b/g, '');
@@ -357,6 +385,51 @@ function extractNumbers(text: string): number[] {
     }
   }
   return results;
+}
+
+// Helper to confirm live donation from anywhere (channel listener, check API, or admin callback)
+export async function confirmLiveDonation(donationId: number, confirmedBy: string = 'SYSTEM'): Promise<boolean> {
+  try {
+    const donation = await (prisma as any).liveDonation.findUnique({
+      where: { id: donationId }
+    });
+    if (!donation || donation.status === 'PAID' || donation.status === 'DISPLAYED') {
+      return true; // Already confirmed
+    }
+
+    const paidAt = new Date();
+    const displayAt = new Date(Date.now() + 30000);
+
+    await (prisma as any).liveDonation.update({
+      where: { id: donation.id },
+      data: { status: 'PAID', paidAt, displayAt }
+    });
+
+    await incrementCardTransfer().catch(() => {});
+
+    // Schedule 30-second broadcast via decoupled event emitter
+    setTimeout(() => {
+      donationEvents.emit('trigger_display', donation.id);
+    }, 30000);
+
+    // Notify user via Telegram bot
+    if (donation.userId) {
+      bot.telegram.sendMessage(
+        donation.userId,
+        `🎉 <b>Donat to'lovingiz muvaffaqiyatli qabul qilindi!</b>\n\n` +
+        `🎁 Sovg'a: ${donation.giftIcon} ${donation.giftName}\n` +
+        `💰 Summa: ${donation.amount.toLocaleString()} so'm\n\n` +
+        `⏳ Donatingiz 30 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`,
+        { parse_mode: 'HTML' }
+      ).catch(() => {});
+    }
+
+    console.log(`[DONATION] Confirmed donation #${donation.id} (${donation.amount} UZS) by ${confirmedBy}`);
+    return true;
+  } catch (err) {
+    console.error('confirmLiveDonation error:', err);
+    return false;
+  }
 }
 
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
@@ -412,6 +485,18 @@ bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
 
   if (!text) return;
 
+  const extractedNumbers = extractNumbers(text);
+
+  // Store in recent channel post buffer (keep last 100 for async checks)
+  recentChannelPosts.unshift({
+    text,
+    numbers: extractedNumbers,
+    timestamp: Date.now()
+  });
+  if (recentChannelPosts.length > 100) {
+    recentChannelPosts.pop();
+  }
+
   const pendingPayments = await prisma.payment.findMany({ 
     where: { status: 'PENDING' },
     include: { plan: true, user: true }
@@ -421,7 +506,6 @@ bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
     where: { status: 'PENDING' }
   });
 
-  const extractedNumbers = extractNumbers(text);
   const exactMatches: any[] = [];
   const exactDonationMatches: any[] = [];
 
@@ -439,6 +523,13 @@ bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
     }
   }
 
+  // Also check direct text pattern match for any pending donation amount (e.g. "5 935" or "5,935")
+  for (const donation of pendingDonations) {
+    if (textContainsAmount(text, donation.amount) && !exactDonationMatches.some(d => d.id === donation.id)) {
+      exactDonationMatches.push(donation);
+    }
+  }
+
   // Deduplicate matched donations to prevent duplicate alerts and double counting
   const uniqueDonationMatches = exactDonationMatches.filter((d, index, self) => 
     self.findIndex(t => t.id === d.id) === index
@@ -447,38 +538,7 @@ bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
   // Auto-confirm matched live donations!
   if (uniqueDonationMatches.length > 0) {
     for (const donation of uniqueDonationMatches) {
-      try {
-        const paidAt = new Date();
-        const displayAt = new Date(Date.now() + 30000);
-
-        await (prisma as any).liveDonation.update({
-          where: { id: donation.id },
-          data: { status: 'PAID', paidAt, displayAt }
-        });
-
-        await incrementCardTransfer();
-
-        // Schedule 30-second broadcast via decoupled event emitter
-        setTimeout(() => {
-          donationEvents.emit('trigger_display', donation.id);
-        }, 30000);
-
-        // Notify user via Telegram bot
-        if (donation.userId) {
-          ctx.telegram.sendMessage(
-            donation.userId,
-            `🎉 <b>Donat to'lovingiz muvaffaqiyatli qabul qilindi!</b>\n\n` +
-            `🎁 Sovg'a: ${donation.giftIcon} ${donation.giftName}\n` +
-            `💰 Summa: ${donation.amount.toLocaleString()} so'm\n\n` +
-            `⏳ Donatingiz 30 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`,
-            { parse_mode: 'HTML' }
-          ).catch(() => {});
-        }
-
-        console.log(`[DONATION] Auto-confirmed donation #${donation.id} for ${donation.amount} UZS`);
-      } catch (dErr) {
-        console.error('Auto-confirm donation error:', dErr);
-      }
+      await confirmLiveDonation(donation.id, 'SMS_GATEWAY');
     }
   }
 
@@ -703,6 +763,54 @@ bot.on('callback_query', async (ctx) => {
       console.error("Reject payment error:", err);
       await ctx.answerCbQuery('❌ Xatolik yuz berdi');
     }
+  } else if (action === 'confirm_donation') {
+    try {
+      const ok = await confirmLiveDonation(paymentId, `ADMIN_${ctx.from.id}`);
+      if (ok) {
+        const cbMsg = (ctx.callbackQuery as any)?.message;
+        const isPhoto = cbMsg?.caption !== undefined;
+        const textVal = isPhoto ? cbMsg.caption : (cbMsg?.text || '');
+        try {
+          if (isPhoto) {
+            await ctx.editMessageCaption(textVal + '\n\n✅ DONAT TASDIQLANDI (30s da chiqadi)', { reply_markup: undefined });
+          } else {
+            await ctx.editMessageText(textVal + '\n\n✅ DONAT TASDIQLANDI (30s da chiqadi)', { reply_markup: undefined });
+          }
+        } catch (e) {
+          await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+        }
+        await ctx.answerCbQuery('✅ Donat tasdiqlandi! 30 soniyada efirga uzatiladi.');
+      } else {
+        await ctx.answerCbQuery('⚠️ Donatni tasdiqlashda xatolik');
+      }
+    } catch (err) {
+      console.error('Confirm donation error:', err);
+      await ctx.answerCbQuery('❌ Xatolik yuz berdi');
+    }
+  } else if (action === 'reject_donation') {
+    try {
+      await (prisma as any).liveDonation.update({
+        where: { id: paymentId },
+        data: { status: 'CANCELLED' }
+      }).catch(() => {});
+
+      const cbMsg = (ctx.callbackQuery as any)?.message;
+      const isPhoto = cbMsg?.caption !== undefined;
+      const textVal = isPhoto ? cbMsg.caption : (cbMsg?.text || '');
+      try {
+        if (isPhoto) {
+          await ctx.editMessageCaption(textVal + '\n\n❌ DONAT BEKOR QILINDI', { reply_markup: undefined });
+        } else {
+          await ctx.editMessageText(textVal + '\n\n❌ DONAT BEKOR QILINDI', { reply_markup: undefined });
+        }
+      } catch (e) {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      }
+      await ctx.answerCbQuery('❌ Donat bekor qilindi');
+    } catch (err) {
+      console.error('Reject donation error:', err);
+      await ctx.answerCbQuery('❌ Xatolik yuz berdi');
+    }
   }
 });
 
@@ -711,7 +819,52 @@ bot.on('callback_query', async (ctx) => {
 bot.on('photo', async (ctx) => {
   const userId = ctx.from.id.toString();
 
-  // Find if user has a pending payment
+  // 1. Check if user has a pending live donation first
+  const pendingDonation = await (prisma as any).liveDonation.findFirst({
+    where: { userId, status: 'PENDING' },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (pendingDonation) {
+    const adminIds = getAdminIds();
+    if (adminIds.length === 0) {
+      return ctx.reply("Adminga bog'lanib bo'lmadi.");
+    }
+
+    const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+    const text = `🎁 **Foydalanuvchi DONAT uchun chek yubordi!**\n\n` +
+      `Foydalanuvchi: ${pendingDonation.userName} (ID: \`${userId}\`)\n` +
+      `Sovg'a: ${pendingDonation.giftIcon} ${pendingDonation.giftName}\n` +
+      `Kutilgan summa: **${pendingDonation.amount.toLocaleString()} so'm**\n` +
+      `Xabar: ${pendingDonation.message ? `"${pendingDonation.message}"` : '*(xabarsiz)*'}\n` +
+      `Donat ID: #${pendingDonation.id}\n\n` +
+      `Iltimos, chekni tekshirib tasdiqlang yoki rad qiling.`;
+
+    let sent = false;
+    for (const aid of adminIds) {
+      try {
+        await bot.telegram.sendPhoto(aid, photo, {
+          caption: text,
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            Markup.button.callback('✅ Donatni tasdiqlash', `confirm_donation:${pendingDonation.id}`),
+            Markup.button.callback('❌ Rad qilish', `reject_donation:${pendingDonation.id}`)
+          ])
+        });
+        sent = true;
+      } catch (e) {
+        console.error(`Failed to send donation receipt to admin ${aid}:`, e);
+      }
+    }
+
+    if (sent) {
+      return ctx.reply("🧾 Donat chekingiz qabul qilindi va adminga yuborildi! Tasdiqlangach, 30 soniyada efirda chiqadi.");
+    } else {
+      return ctx.reply("❌ Xatolik: Chekni adminga yuborishning imkoni bo'lmadi.");
+    }
+  }
+
+  // 2. Find if user has a pending VIP subscription payment
   const pendingPayment = await prisma.payment.findFirst({
     where: { userId, status: 'PENDING' },
     orderBy: { createdAt: 'desc' },
