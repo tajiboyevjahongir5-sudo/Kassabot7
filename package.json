@@ -11,6 +11,6 @@
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
     "build": "npm run install:all && npm run build:frontend && npm run build:backend",
-    "start": "cd backend && npx prisma db push --accept-data-loss && node dist/index.js"
+    "start": "cd frontend && npm install && npm run build && cd ../backend && npx prisma db push --accept-data-loss && node dist/index.js"
   }
 }

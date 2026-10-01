@@ -39,6 +39,24 @@ async function main() {
     try {
       await bot.launch({ allowedUpdates: ['message', 'channel_post', 'callback_query', 'chat_join_request'] });
       console.log('[SERVER] Telegram bot started.');
+
+      // Update Telegram Menu Button with cache-busting timestamp
+      const webAppUrl = process.env.WEBAPP_URL;
+      if (webAppUrl) {
+        try {
+          const sep = webAppUrl.includes('?') ? '&' : '?';
+          await bot.telegram.setChatMenuButton({
+            menu_button: {
+              type: 'web_app',
+              text: 'DIORA VIP',
+              web_app: { url: `${webAppUrl}${sep}_v=${Date.now()}` }
+            }
+          });
+          console.log('[SERVER] Telegram Menu Button updated with cache buster.');
+        } catch (menuErr) {
+          console.error('[SERVER] Menu button update error:', menuErr);
+        }
+      }
     } catch (botErr) {
       console.error('[SERVER] Bot failed to start:', botErr);
     }
