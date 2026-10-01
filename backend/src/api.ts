@@ -1706,12 +1706,12 @@ app.post('/api/live/donate/check/:donationId', async (req, res) => {
       }
     }
 
-    // 3. Still pending — provide clear status and inform that photo receipt can also be sent to bot
+    // 3. Still pending — automatic bank verification in progress
     res.json({
       success: false,
       status: 'PENDING',
       isAdminUser: isUserAdmin,
-      message: 'To\'lov hali bank tizimi orqali tasdiqlanmadi (odatda 10-30 soniya vaqt oladi). Agar to\'lov qilgan bo\'lsangiz, botga to\'lov chekini (skrinshotini) yuborishingiz mumkin.'
+      message: 'To\'lov bank tizimi orqali avtomatik tekshirilmoqda (odatda 10-20 soniya vaqt oladi). Iltimos, oynani yopmasdan kuting yoki qayta tekshiring.'
     });
   } catch (err) {
     console.error('check donation error:', err);

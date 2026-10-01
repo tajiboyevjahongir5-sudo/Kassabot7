@@ -432,6 +432,16 @@ export async function confirmLiveDonation(donationId: number, confirmedBy: strin
   }
 }
 
+export function matchesChannelId(savedId: string | null | undefined, currentId: string | number | null | undefined): boolean {
+  if (!savedId || !currentId) return false;
+  const s = String(savedId).trim();
+  const c = String(currentId).trim();
+  if (s === c) return true;
+  const cleanS = s.replace(/^-100/, '').replace(/^-/, '');
+  const cleanC = c.replace(/^-100/, '').replace(/^-/, '');
+  return cleanS === cleanC;
+}
+
 // ============ CHANNEL POST LISTENER (Auto-verify payments) ============
 
 bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
@@ -476,13 +486,9 @@ bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
   } catch (err) {
     console.error("Bot log channel parsing error:", err);
   }
+});
 
-  // 2. Check if this is the Payment Verification channel
-  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  if (!settings || settings.paymentChannelId !== channelId) {
-    return;
-  }
-
+export async function processIncomingPaymentText(text: string, channelId: string) {
   if (!text) return;
 
   const extractedNumbers = extractNumbers(text);
@@ -588,54 +594,37 @@ bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
         );
       } catch (err) {
         console.error("Auto confirmation error for payment ID " + payment.id + ":", err);
-        try {
-          await bot.telegram.sendMessage(
-            payment.userId, 
-            `✅ To'lovingiz tasdiqlandi, lekin kanalga havola yaratishda xatolik yuz berdi. Iltimos, adminga murojaat qiling.`
-          );
-        } catch (e) {}
-      }
-    }
-  } else {
-    // No exact match. Identify the likely payment amount from the bank SMS (the number closest to any pending payment)
-    let bestMatch: { payment: any; foundAmount: number; diff: number } | null = null;
-
-    for (const num of extractedNumbers) {
-      for (const payment of pendingPayments) {
-        const diff = Math.abs(payment.amount - num);
-        // We look for a number that is somewhat close to avoid picking bank balances (e.g. diff <= 50000)
-        if (diff <= 50000 && (!bestMatch || diff < bestMatch.diff)) {
-          bestMatch = { payment, foundAmount: num, diff };
-        }
-      }
-    }
-
-    if (bestMatch) {
-      const adminIds = getAdminIds();
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const recentPendingPayments = pendingPayments.filter(p => new Date(p.createdAt) >= fiveMinutesAgo);
-
-      if (recentPendingPayments.length > 0) {
-        // Notify admin
-        for (const aid of adminIds) {
-          await bot.telegram.sendMessage(
-            aid,
-            `⚠️ Noto'g'ri summa keldi!\n\nKelgan summa: ${bestMatch.foundAmount} so'm\n\nOxirgi 5 daqiqa ichida to'lov qilmoqchi bo'lgan ${recentPendingPayments.length} ta mijozga chek so'rab xabar yuborildi.`
-          ).catch(e => console.error("Admin notification error:", e));
-        }
-
-        // Notify all recent pending users
-        for (const payment of recentPendingPayments) {
-          try {
-            await bot.telegram.sendMessage(
-              payment.userId,
-              `⚠️ Bizga ${bestMatch.foundAmount} so'm kelib tushdi, lekin sizning to'lovingiz ${payment.amount} so'm bo'lishi kerak edi.\n\nAgar bu to'lovni siz amalga oshirgan bo'lsangiz, iltimos to'lov chekini (skrinshotini) shu yerga yuboring.`
-            );
-          } catch (e) {}
-        }
       }
     }
   }
+}
+
+// 2. Check if this is the Payment Verification channel (supports -100 prefix or without)
+bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
+  const channelId = ctx.chat.id.toString();
+  const cp = (ctx.channelPost || (ctx as any).editedChannelPost) as any;
+  const text = cp?.text || cp?.caption || "";
+
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  if (settings && matchesChannelId(settings.paymentChannelId, channelId) && text) {
+    await processIncomingPaymentText(text, channelId);
+  }
+});
+
+// Also listen on group messages in case SMS gateway sends SMS to a Telegram Group instead of a Channel
+bot.on('message', async (ctx, next) => {
+  const channelId = ctx.chat?.id?.toString() || "";
+  if (channelId) {
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (settings && matchesChannelId(settings.paymentChannelId, channelId)) {
+      const text = (ctx.message as any)?.text || (ctx.message as any)?.caption || "";
+      if (text) {
+        await processIncomingPaymentText(text, channelId);
+        return;
+      }
+    }
+  }
+  return next();
 });
 
 // ============ INLINE BUTTON CALLBACKS (Admin confirm/reject from Telegram) ============
@@ -819,49 +808,14 @@ bot.on('callback_query', async (ctx) => {
 bot.on('photo', async (ctx) => {
   const userId = ctx.from.id.toString();
 
-  // 1. Check if user has a pending live donation first
+  // 1. If user sends photo for donation, inform that receipts are not needed
   const pendingDonation = await (prisma as any).liveDonation.findFirst({
     where: { userId, status: 'PENDING' },
     orderBy: { createdAt: 'desc' }
   });
 
   if (pendingDonation) {
-    const adminIds = getAdminIds();
-    if (adminIds.length === 0) {
-      return ctx.reply("Adminga bog'lanib bo'lmadi.");
-    }
-
-    const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-    const text = `🎁 **Foydalanuvchi DONAT uchun chek yubordi!**\n\n` +
-      `Foydalanuvchi: ${pendingDonation.userName} (ID: \`${userId}\`)\n` +
-      `Sovg'a: ${pendingDonation.giftIcon} ${pendingDonation.giftName}\n` +
-      `Kutilgan summa: **${pendingDonation.amount.toLocaleString()} so'm**\n` +
-      `Xabar: ${pendingDonation.message ? `"${pendingDonation.message}"` : '*(xabarsiz)*'}\n` +
-      `Donat ID: #${pendingDonation.id}\n\n` +
-      `Iltimos, chekni tekshirib tasdiqlang yoki rad qiling.`;
-
-    let sent = false;
-    for (const aid of adminIds) {
-      try {
-        await bot.telegram.sendPhoto(aid, photo, {
-          caption: text,
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            Markup.button.callback('✅ Donatni tasdiqlash', `confirm_donation:${pendingDonation.id}`),
-            Markup.button.callback('❌ Rad qilish', `reject_donation:${pendingDonation.id}`)
-          ])
-        });
-        sent = true;
-      } catch (e) {
-        console.error(`Failed to send donation receipt to admin ${aid}:`, e);
-      }
-    }
-
-    if (sent) {
-      return ctx.reply("🧾 Donat chekingiz qabul qilindi va adminga yuborildi! Tasdiqlangach, 30 soniyada efirda chiqadi.");
-    } else {
-      return ctx.reply("❌ Xatolik: Chekni adminga yuborishning imkoni bo'lmadi.");
-    }
+    return ctx.reply("ℹ️ **Donat uchun chek yuborish shart emas!**\n\nTo'lovingiz bank tizimi orqali avtomatik tekshirilmoqda. Pul tushishi bilan donatingiz 30 soniyadan so'ng jonli efirda ovoz bilan chiqadi!", { parse_mode: 'Markdown' });
   }
 
   // 2. Find if user has a pending VIP subscription payment
