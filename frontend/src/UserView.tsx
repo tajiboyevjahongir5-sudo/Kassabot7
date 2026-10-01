@@ -381,10 +381,8 @@ function UserView() {
             userName={tg?.initDataUnsafe?.user?.first_name || new URLSearchParams(window.location.search).get('userName') || 'Foydalanuvchi'}
             onBack={() => setCurrentTab('subscription')}
           />
-        ) : (
-          <>
-            {activePayment ? (
-              <div className="cyber-card" style={{ padding: '20px', textAlign: 'center' }}>
+        ) : activePayment ? (
+          <div className="cyber-card" style={{ padding: '20px', textAlign: 'center' }}>
             <h2 className="gradient-title" style={{ fontSize: '22px', marginBottom: '15px' }}>To'lov qilish</h2>
             <div style={{ 
               background: 'linear-gradient(90deg, rgba(255, 170, 0, 0.1), rgba(255, 50, 50, 0.05))', 
