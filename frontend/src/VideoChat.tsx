@@ -980,50 +980,51 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       {/* Spacer to push comments to bottom */}
       <div style={{ flex: 1 }} />
 
-      {/* 3. Floating Comments Layer (YouTube Shorts Live Style) */}
+      {/* 3. Floating Comments Layer (TikTok Live Style — 4 visible + 1 fading) */}
       <div style={{
         position: 'absolute',
         bottom: '80px',
         left: '12px',
         right: '72px',
-        maxHeight: '40vh',
-        overflowY: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
         zIndex: 30,
         pointerEvents: 'none',
-        maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 95%)',
-        WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 95%)'
       }}>
-        {comments.slice(-12).map((c, i) => (
-          <div
-            key={c.id || i}
-            style={{
-              background: 'rgba(0, 0, 0, 0.5)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '16px',
-              padding: '6px 12px',
-              marginBottom: '6px',
-              maxWidth: '92%',
-              alignSelf: 'flex-start',
-              animation: 'slideUp 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-            }}
-          >
-            <span style={{ 
-              fontWeight: '700', 
-              fontSize: '12px', 
-              color: c.userId === String(liveStream?.streamerId) ? '#fbbf24' : '#38bdf8', 
-              marginRight: '6px' 
-            }}>
-              {c.userName}:
-            </span>
-            <span style={{ fontSize: '13px', color: '#ffffff', wordBreak: 'break-word' }}>
-              {c.text}
-            </span>
-          </div>
-        ))}
+        {comments.slice(-5).map((c, i, arr) => {
+          const isOldest = i === 0 && arr.length === 5;
+          return (
+            <div
+              key={c.id || i}
+              style={{
+                background: 'rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '6px 12px',
+                marginBottom: '6px',
+                maxWidth: '92%',
+                alignSelf: 'flex-start',
+                animation: isOldest ? 'fadeOutComment 0.5s ease forwards' : 'slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                opacity: isOldest ? 0.3 : 1,
+                transition: 'opacity 0.4s ease',
+              }}
+            >
+              <span style={{ 
+                fontWeight: '700', 
+                fontSize: '12px', 
+                color: c.userId === String(liveStream?.streamerId) ? '#fbbf24' : '#38bdf8', 
+                marginRight: '6px' 
+              }}>
+                {c.userName}:
+              </span>
+              <span style={{ fontSize: '13px', color: '#ffffff', wordBreak: 'break-word' }}>
+                {c.text}
+              </span>
+            </div>
+          );
+        })}
         <div ref={commentsEndRef} />
       </div>
 
@@ -1155,6 +1156,20 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+        @keyframes fadeOutComment {
+          0% {
+            opacity: 0.3;
+            transform: translateY(0);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-10px);
+            max-height: 0;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
           }
         }
       `}</style>
