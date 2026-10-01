@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { 
   Radio, Bell, BellOff, Video, VideoOff, Mic, MicOff, 
-  Send, Eye, X, RefreshCw, Heart, Sparkles, Volume2, VolumeX, ShieldAlert 
+  Send, Eye, X, RefreshCw, Heart, Sparkles, Volume2, VolumeX, ShieldAlert,
+  Gift, Copy, Check, ArrowLeft, Loader2
 } from 'lucide-react';
 
 interface Comment {
@@ -16,6 +17,77 @@ interface FloatingHeart {
   id: number;
   emoji: string;
   left: number;
+}
+
+export interface DonationGift {
+  id: string;
+  name: string;
+  icon: string;
+  price: number;
+  description: string;
+}
+
+export const DONATION_GIFTS: DonationGift[] = [
+  { id: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash' },
+  { id: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat' },
+  { id: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish' },
+  { id: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish' },
+  { id: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom' },
+  { id: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat' },
+  { id: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a' },
+  { id: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat' }
+];
+
+// Web Audio API Cash Chime
+function playDonationChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const tones = [1046.5, 1318.5, 1567.98];
+    tones.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.11);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.11);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.11 + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + idx * 0.11);
+      osc.stop(ctx.currentTime + idx * 0.11 + 0.5);
+    });
+  } catch (e) {
+    console.error('Audio chime error:', e);
+  }
+}
+
+// Natural Human-like Speech Synthesis (Odam o'qigandek)
+function speakDonationMessage(userName: string, amount: number, text: string) {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance();
+    const cleanText = text ? text.replace(/[^\p{L}\p{N}\s,!.?]/gu, '').trim() : '';
+    utterance.text = `${userName} ${amount.toLocaleString()} so'm donat qildi. ${cleanText}`;
+
+    const voices = window.speechSynthesis.getVoices();
+    const naturalVoice = voices.find(v => 
+      (v.lang.startsWith('uz') || v.lang.startsWith('ru') || v.lang.startsWith('tr')) &&
+      (v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google') || v.name.includes('Milena') || v.name.includes('Siri') || v.name.includes('Yuri'))
+    ) || voices.find(v => v.lang.startsWith('ru') || v.lang.startsWith('uz') || v.lang.startsWith('tr')) || voices[0];
+
+    if (naturalVoice) utterance.voice = naturalVoice;
+    utterance.rate = 0.92;
+    utterance.pitch = 1.05;
+    utterance.volume = 1.0;
+
+    setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 450);
+  } catch (err) {
+    console.error('Speech synthesis error:', err);
+  }
 }
 
 interface VideoChatProps {
@@ -42,6 +114,19 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [viewersCount, setViewersCount] = useState<number>(1);
   const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
 
+  // Donation States
+  const [showGiftsModal, setShowGiftsModal] = useState<boolean>(false);
+  const [donationStep, setDonationStep] = useState<'select' | 'compose' | 'payment' | 'success'>('select');
+  const [selectedGift, setSelectedGift] = useState<DonationGift | null>(null);
+  const [donationMessage, setDonationMessage] = useState<string>('');
+  const [donationPaymentData, setDonationPaymentData] = useState<any | null>(null);
+  const [creatingDonation, setCreatingDonation] = useState<boolean>(false);
+  const [checkingDonation, setCheckingDonation] = useState<boolean>(false);
+  const [checkErrorMessage, setCheckErrorMessage] = useState<string | null>(null);
+  const [copiedCard, setCopiedCard] = useState<boolean>(false);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(30);
+  const [currentDonationAlert, setCurrentDonationAlert] = useState<any | null>(null);
+
   // Streamer Live state
   const [isBroadcasting, setIsBroadcasting] = useState<boolean>(false);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
@@ -59,6 +144,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const viewerPeerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const frameIntervalRef = useRef<any>(null);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
+  const countdownTimerRef = useRef<any>(null);
 
   // 1. Initial Status & User Permission check
   const fetchStatusAndPermissions = async () => {
@@ -154,6 +240,27 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         const comment = JSON.parse(e.data);
         setComments(prev => [...prev.slice(-40), comment]);
       } catch {}
+    });
+
+    sse.addEventListener('new_donation', (e: any) => {
+      try {
+        const donation = JSON.parse(e.data);
+        console.log('[LIVE DONATION RECEIVED]', donation);
+
+        // 1. Play audio chime and human-like voice
+        playDonationChime();
+        speakDonationMessage(donation.userName, donation.amount, donation.message);
+
+        // 2. Show alert banner on top center
+        setCurrentDonationAlert(donation);
+
+        // 3. Auto hide after 9 seconds
+        setTimeout(() => {
+          setCurrentDonationAlert((curr: any) => curr?.id === donation.id ? null : curr);
+        }, 9000);
+      } catch (err) {
+        console.error('new_donation event error:', err);
+      }
     });
 
     sse.addEventListener('stream_ended', () => {
@@ -530,6 +637,95 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [comments]);
+
+  // Donation Handlers
+  const handleSelectGift = (gift: DonationGift) => {
+    setSelectedGift(gift);
+    setDonationMessage('');
+    setCheckErrorMessage(null);
+    setDonationStep('compose');
+  };
+
+  const handleProceedToPayment = async () => {
+    if (!selectedGift) return;
+    setCreatingDonation(true);
+    setCheckErrorMessage(null);
+    try {
+      const res = await fetch(`${API_URL}/live/donate/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          userName: userName || 'Mehmon',
+          giftId: selectedGift.id,
+          message: donationMessage
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDonationPaymentData(data);
+        setDonationStep('payment');
+      } else {
+        alert(data.error || 'Xatolik yuz berdi');
+      }
+    } catch (err) {
+      alert('Server bilan bog\'lanishda xatolik');
+    } finally {
+      setCreatingDonation(false);
+    }
+  };
+
+  const handleCheckPayment = async () => {
+    if (!donationPaymentData?.donationId) return;
+    setCheckingDonation(true);
+    setCheckErrorMessage(null);
+    try {
+      const res = await fetch(`${API_URL}/live/donate/check/${donationPaymentData.donationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDonationStep('success');
+        setCountdownSeconds(30);
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = setInterval(() => {
+          setCountdownSeconds(prev => {
+            if (prev <= 1) {
+              clearInterval(countdownTimerRef.current);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        setCheckErrorMessage(data.message || 'To\'lov hali tizimda ko\'rinmadi. Iltimos 10-15 soniya kuting yoki qayta tekshiring.');
+      }
+    } catch (err) {
+      setCheckErrorMessage('Server bilan bog\'lanishda xatolik yuz berdi. Qayta urinib ko\'ring.');
+    } finally {
+      setCheckingDonation(false);
+    }
+  };
+
+  const handleCopyCard = (num: string) => {
+    if (!num) return;
+    navigator.clipboard.writeText(num.replace(/\s+/g, '')).catch(() => {});
+    setCopiedCard(true);
+    setTimeout(() => setCopiedCard(false), 2200);
+  };
+
+  const handleCloseDonationModal = () => {
+    setShowGiftsModal(false);
+    setDonationStep('select');
+    setSelectedGift(null);
+    setDonationMessage('');
+    setCheckErrorMessage(null);
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+  };
 
   if (loading) {
     return (
@@ -977,6 +1173,74 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         </div>
       </div>
 
+      {/* 2.5 DONATION ALERT BANNER (Jonli efirda o'tirgan barchaga chiqadigan chiroyli animatsiyali alert) */}
+      {currentDonationAlert && (
+        <div style={{
+          position: 'absolute',
+          top: '72px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 90,
+          width: '90%',
+          maxWidth: '360px',
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95))',
+          backdropFilter: 'blur(16px)',
+          borderRadius: '18px',
+          padding: '12px 16px',
+          border: '2px solid rgba(254, 240, 138, 0.9)',
+          boxShadow: '0 10px 30px rgba(245, 158, 11, 0.6), 0 0 25px rgba(254, 240, 138, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          animation: 'donationBannerIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            fontSize: '36px',
+            lineHeight: 1,
+            animation: 'bounceGift 1s infinite alternate',
+            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
+          }}>
+            {currentDonationAlert.giftIcon || '🎁'}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: '900', fontSize: '13px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                {currentDonationAlert.userName}
+              </span>
+              <span style={{
+                background: '#ffffff',
+                color: '#b45309',
+                fontSize: '11px',
+                fontWeight: '800',
+                padding: '1px 6px',
+                borderRadius: '10px'
+              }}>
+                {Number(currentDonationAlert.amount).toLocaleString()} so'm
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#fef08a', fontWeight: '700', marginTop: '1px' }}>
+              {currentDonationAlert.giftName} sovg'a qildi!
+            </div>
+            {currentDonationAlert.message && (
+              <div style={{
+                fontSize: '12px',
+                color: '#ffffff',
+                fontWeight: '600',
+                marginTop: '4px',
+                lineHeight: '1.3',
+                background: 'rgba(0,0,0,0.2)',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                wordBreak: 'break-word'
+              }}>
+                "{currentDonationAlert.message}"
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Spacer to push comments to bottom */}
       <div style={{ flex: 1 }} />
 
@@ -1109,28 +1373,548 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           </button>
         </form>
 
-        {/* Floating Heart / Like Button */}
-        <button
-          type="button"
-          onClick={() => handleSendReaction('❤️')}
-          style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
-            border: 'none',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(239, 68, 68, 0.5)',
-            flexShrink: 0
-          }}
-        >
-          <Heart size={20} fill="#fff" />
-        </button>
+        {/* Right Buttons: Donat button on top of Heart button */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          flexShrink: 0
+        }}>
+          {/* 1. DONAT BUTTON (Yurakcha tepasida) */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowGiftsModal(true);
+              setDonationStep('select');
+            }}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              border: '2px solid rgba(254, 240, 138, 0.8)',
+              color: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 15px rgba(245, 158, 11, 0.6)',
+              animation: 'pulseDonat 2s infinite',
+              gap: '1px'
+            }}
+            title="Donat qilish"
+          >
+            <Gift size={18} />
+            <span style={{ fontSize: '7.5px', fontWeight: '900', letterSpacing: '0.3px' }}>
+              DONAT
+            </span>
+          </button>
+
+          {/* 2. Floating Heart / Like Button */}
+          <button
+            type="button"
+            onClick={() => handleSendReaction('❤️')}
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
+              border: 'none',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 15px rgba(239, 68, 68, 0.5)'
+            }}
+          >
+            <Heart size={20} fill="#fff" />
+          </button>
+        </div>
       </div>
+
+      {/* 6. SOVG'ALAR JAVONI VA DANAT MODAL (Jonli efirni to'liq yopmaydi) */}
+      {showGiftsModal && (
+        <>
+          {/* Translucent backdrop (jonli efir orqa fonda ko'rinib turadi) */}
+          <div 
+            onClick={handleCloseDonationModal}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.45)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 100000
+            }}
+          />
+
+          {/* Bottom Sheet Drawer */}
+          <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            maxHeight: '75vh',
+            background: 'linear-gradient(180deg, #131b2e 0%, #0b0f19 100%)',
+            borderTop: '2px solid rgba(245, 158, 11, 0.5)',
+            borderRadius: '24px 24px 0 0',
+            zIndex: 100001,
+            overflowY: 'auto',
+            padding: '18px 16px 24px 16px',
+            boxShadow: '0 -10px 40px rgba(0,0,0,0.8), 0 0 30px rgba(245, 158, 11, 0.2)',
+            animation: 'slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+          }}>
+            {/* Grab Handle */}
+            <div style={{
+              width: '40px',
+              height: '4px',
+              borderRadius: '2px',
+              background: 'rgba(255, 255, 255, 0.25)',
+              margin: '0 auto 14px auto'
+            }} />
+
+            {/* ================= STEP 1: SOVG'ALAR JAVONI ================= */}
+            {donationStep === 'select' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>🎁</span>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#fef08a', margin: 0 }}>
+                      Sovg'alar javoni (Donat)
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseDonationModal}
+                    style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      border: 'none',
+                      color: '#fff',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 14px 0' }}>
+                  Streamerga sovg'a yuboring! Sovg'angiz efirda chiqadi va xabaringiz ovoz bilan o'qiladi:
+                </p>
+
+                {/* Gifts Grid (4 columns) */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '8px'
+                }}>
+                  {DONATION_GIFTS.map(gift => (
+                    <div
+                      key={gift.id}
+                      onClick={() => handleSelectGift(gift)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        borderRadius: '14px',
+                        padding: '10px 4px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <div style={{ fontSize: '30px', lineHeight: 1 }}>{gift.icon}</div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                        {gift.name}
+                      </div>
+                      <div style={{ fontSize: '10px', fontWeight: '800', color: '#f59e0b' }}>
+                        {gift.price.toLocaleString()} so'm
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ================= STEP 2: TANLANGAN SOVG'A VA XABAR YOZISH ================= */}
+            {donationStep === 'compose' && selectedGift && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDonationStep('select')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#38bdf8',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      padding: 0
+                    }}
+                  >
+                    <ArrowLeft size={16} /> Sovg'alar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseDonationModal}
+                    style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      border: 'none',
+                      color: '#fff',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Tanlangan sovg'a ekran o'rtasiga sal kattalashib kelgan holati */}
+                <div style={{
+                  textAlign: 'center',
+                  padding: '12px',
+                  background: 'radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(0,0,0,0) 70%)',
+                  borderRadius: '16px',
+                  marginBottom: '14px'
+                }}>
+                  <div style={{
+                    fontSize: '64px',
+                    lineHeight: 1,
+                    animation: 'popInGift 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                    filter: 'drop-shadow(0 0 16px rgba(245, 158, 11, 0.8))',
+                    display: 'inline-block'
+                  }}>
+                    {selectedGift.icon}
+                  </div>
+                  <h4 style={{ fontSize: '17px', fontWeight: '900', color: '#fff', margin: '8px 0 2px 0' }}>
+                    {selectedGift.name}
+                  </h4>
+                  <div style={{
+                    display: 'inline-block',
+                    background: 'rgba(245, 158, 11, 0.2)',
+                    border: '1px solid rgba(245, 158, 11, 0.6)',
+                    color: '#fef08a',
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    padding: '3px 12px',
+                    borderRadius: '20px'
+                  }}>
+                    {selectedGift.price.toLocaleString()} so'm
+                  </div>
+                </div>
+
+                {/* Xabar yozish joyi */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginBottom: '6px' }}>
+                    Jonli efirda o'qib beriladigan xabar:
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Efirda ovoz bilan o'qib beriladigan xabaringizni yozing..."
+                    value={donationMessage}
+                    onChange={e => setDonationMessage(e.target.value)}
+                    maxLength={200}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      padding: '10px 12px',
+                      color: '#fff',
+                      fontSize: '13px',
+                      outline: 'none',
+                      resize: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                    {donationMessage.length}/200
+                  </div>
+                </div>
+
+                {/* Danat qilish tugmasi */}
+                <button
+                  type="button"
+                  onClick={handleProceedToPayment}
+                  disabled={creatingDonation}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '14px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    color: '#fff',
+                    fontWeight: '800',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 18px rgba(245, 158, 11, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {creatingDonation ? (
+                    <div className="spinner" style={{ width: '18px', height: '18px' }}></div>
+                  ) : (
+                    <>
+                      <span>💳 Donat qilish ({selectedGift.price.toLocaleString()} so'm)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* ================= STEP 3: TO'LOV QILISH SAHIFASI ================= */}
+            {donationStep === 'payment' && donationPaymentData && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '18px' }}>💳</span>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#fff', margin: 0 }}>
+                      To'lov qilish
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseDonationModal}
+                    style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      border: 'none',
+                      color: '#fff',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* To'lov summasi */}
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: '14px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  marginBottom: '12px'
+                }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                    O'tkazish summasi (aynan shu summani o'tkazing):
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#fef08a', margin: '4px 0' }}>
+                    {donationPaymentData.amount.toLocaleString()} so'm
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: '#f59e0b', fontWeight: '600' }}>
+                    ⚠️ To'lov avtomatik aniqlanishi uchun bir tiyingacha to'g'ri o'tkazing!
+                  </div>
+                </div>
+
+                {/* Karta ma'lumotlari */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
+                  marginBottom: '12px'
+                }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
+                    Qabul qiluvchi karta:
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '1px', color: '#fff' }}>
+                      {donationPaymentData.cardNumber || 'Karta topilmadi'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCard(donationPaymentData.cardNumber)}
+                      style={{
+                        background: copiedCard ? '#22c55e' : 'rgba(56, 189, 248, 0.2)',
+                        border: '1px solid rgba(56, 189, 248, 0.4)',
+                        color: copiedCard ? '#fff' : '#38bdf8',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {copiedCard ? <Check size={13} /> : <Copy size={13} />}
+                      <span>{copiedCard ? 'Nusxalandi' : 'Nusxalash'}</span>
+                    </button>
+                  </div>
+                  {donationPaymentData.cardHolder && (
+                    <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>
+                      {donationPaymentData.cardHolder} {donationPaymentData.bankName ? `(${donationPaymentData.bankName})` : ''}
+                    </div>
+                  )}
+                </div>
+
+                {/* Click orqali to'lash (agar mavjud bo'lsa) */}
+                {donationPaymentData.clickP2pUrl && (
+                  <div style={{ marginBottom: '12px' }}>
+                    <a
+                      href={donationPaymentData.clickP2pUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        background: '#00a5ff',
+                        color: '#fff',
+                        fontWeight: '800',
+                        fontSize: '13px',
+                        textDecoration: 'none',
+                        boxShadow: '0 4px 15px rgba(0, 165, 255, 0.4)'
+                      }}
+                    >
+                      <span>📲 Click orqali to'lash</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Xatolik xabari (agar to'lov hali tushmagan bo'lsa) */}
+                {checkErrorMessage && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#fca5a5',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    marginBottom: '12px',
+                    lineHeight: '1.4'
+                  }}>
+                    {checkErrorMessage}
+                  </div>
+                )}
+
+                {/* To'lov qildim tugmasi */}
+                <button
+                  type="button"
+                  onClick={handleCheckPayment}
+                  disabled={checkingDonation}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '14px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                    color: '#fff',
+                    fontWeight: '800',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 18px rgba(34, 197, 94, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {checkingDonation ? (
+                    <>
+                      <div className="spinner" style={{ width: '18px', height: '18px' }}></div>
+                      <span>To'lov tekshirilmoqda...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>✅ To'lov qildim</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* ================= STEP 4: TO'LOV QABUL QILINDI ANIMATSIYASI ================= */}
+            {donationStep === 'success' && (
+              <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+                {/* Oltin yulduzlar va konfeti emojilari */}
+                <div style={{ fontSize: '48px', animation: 'bounceGift 1s infinite alternate', marginBottom: '8px' }}>
+                  🎉✨👑
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#fef08a', margin: '0 0 6px 0' }}>
+                  To'lovingiz qabul qilindi!
+                </h3>
+                <p style={{ fontSize: '13px', color: '#ffffff', margin: '0 0 16px 0', lineHeight: '1.5' }}>
+                  Donatingiz <span style={{ color: '#f59e0b', fontWeight: '800' }}>{countdownSeconds} sekunddan</span> keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!
+                </p>
+
+                {/* Katta doiraviy countdown taymer */}
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  border: '3px solid #f59e0b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px auto',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  boxShadow: '0 0 25px rgba(245, 158, 11, 0.5)'
+                }}>
+                  <span style={{ fontSize: '32px', fontWeight: '900', color: '#fef08a' }}>
+                    {countdownSeconds}
+                  </span>
+                </div>
+
+                {/* Jonli efirga qaytish tugmasi */}
+                <button
+                  type="button"
+                  onClick={handleCloseDonationModal}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '14px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #38bdf8, #0284c7)',
+                    color: '#fff',
+                    fontWeight: '800',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 18px rgba(56, 189, 248, 0.4)'
+                  }}
+                >
+                  🎥 Jonli efirga qaytish
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Global CSS for Animations */}
       <style>{`
@@ -1170,6 +1954,56 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             padding: 0;
             margin: 0;
             overflow: hidden;
+          }
+        }
+        @keyframes pulseDonat {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.6);
+          }
+          50% {
+            transform: scale(1.08);
+            box-shadow: 0 4px 22px rgba(245, 158, 11, 0.9), 0 0 10px rgba(254, 240, 138, 0.7);
+          }
+        }
+        @keyframes popInGift {
+          0% {
+            transform: scale(0.4);
+            opacity: 0;
+          }
+          70% {
+            transform: scale(1.15);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes slideUpSheet {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        @keyframes donationBannerIn {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -20px) scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0) scale(1);
+          }
+        }
+        @keyframes bounceGift {
+          from {
+            transform: translateY(0) scale(1);
+          }
+          to {
+            transform: translateY(-6px) scale(1.08);
           }
         }
       `}</style>

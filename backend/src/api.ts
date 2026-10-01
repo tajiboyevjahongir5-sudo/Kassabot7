@@ -1083,6 +1083,239 @@ app.post('/api/live/frame', (req, res) => {
   res.json({ ok: true });
 });
 
+// ================= LIVE DONATIONS (SOVG'ALAR VA DANAT) =================
+export const DONATION_GIFTS = [
+  { id: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash' },
+  { id: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat' },
+  { id: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish' },
+  { id: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish' },
+  { id: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom' },
+  { id: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat' },
+  { id: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a' },
+  { id: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat' }
+];
+
+// Helper to trigger broadcast of donation after 30s delay
+export async function triggerDonationDisplay(donationId: number) {
+  try {
+    const donation = await (prisma as any).liveDonation.findUnique({
+      where: { id: donationId }
+    });
+    if (!donation || donation.status === 'DISPLAYED') return;
+
+    await (prisma as any).liveDonation.update({
+      where: { id: donationId },
+      data: { status: 'DISPLAYED' }
+    });
+
+    // Broadcast to ALL live participants (streamer + viewers)
+    broadcastLiveEvent('new_donation', {
+      id: donation.id,
+      userId: donation.userId,
+      userName: donation.userName,
+      giftId: donation.giftId,
+      giftName: donation.giftName,
+      giftIcon: donation.giftIcon,
+      amount: donation.amount,
+      message: donation.message,
+      timestamp: Date.now()
+    });
+
+    console.log(`[DONATION] Displayed on live stream: ${donation.userName} sent ${donation.giftName} (${donation.amount} UZS)`);
+  } catch (err) {
+    console.error('triggerDonationDisplay error:', err);
+  }
+}
+
+// 1. Get donation gifts list
+app.get('/api/live/gifts', (_req, res) => {
+  res.json({ gifts: DONATION_GIFTS });
+});
+
+// 2. Create a donation (generates unique amount with suffix & gets active card)
+app.post('/api/live/donate/create', async (req, res) => {
+  try {
+    const { userId, userName, giftId, message } = req.body;
+    if (!userId || !giftId) {
+      return res.status(400).json({ error: 'userId va giftId talab qilinadi' });
+    }
+
+    const gift = DONATION_GIFTS.find(g => g.id === giftId);
+    if (!gift) {
+      return res.status(400).json({ error: 'Noto\'g\'ri sovg\'a tanlandi' });
+    }
+
+    // Get active live stream if any
+    const activeStream = await (prisma as any).liveStream.findFirst({
+      where: { status: 'ACTIVE' },
+      orderBy: { id: 'desc' }
+    });
+
+    // Get active card & settings
+    const activeCard = await prisma.card.findFirst({ where: { isActive: true } });
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    const cardNumber = activeCard ? activeCard.cardNumber : '';
+    const cardHolder = activeCard ? activeCard.cardHolder : '';
+    const bankName = activeCard ? activeCard.bankName : '';
+    const clickP2pUrl = (activeCard && activeCard.clickP2pUrl) ? activeCard.clickP2pUrl : (settings?.clickP2pUrl || '');
+
+    // Generate unique random suffix (1..999) to differentiate payments
+    const pendingDonations = await (prisma as any).liveDonation.findMany({
+      where: { status: 'PENDING' }
+    });
+    const pendingPayments = await prisma.payment.findMany({
+      where: { status: 'PENDING' }
+    });
+    const busyAmounts = new Set([
+      ...pendingDonations.map((d: any) => d.amount),
+      ...pendingPayments.map(p => p.amount)
+    ]);
+
+    let randomSuffix = Math.floor(Math.random() * 900) + 100;
+    let exactAmount = gift.price + randomSuffix;
+    let attempts = 0;
+    while (busyAmounts.has(exactAmount) && attempts < 50) {
+      randomSuffix = Math.floor(Math.random() * 900) + 100;
+      exactAmount = gift.price + randomSuffix;
+      attempts++;
+    }
+
+    const donation = await (prisma as any).liveDonation.create({
+      data: {
+        streamId: activeStream?.id || null,
+        userId: String(userId),
+        userName: userName || 'Mehmon',
+        giftId: gift.id,
+        giftName: gift.name,
+        giftIcon: gift.icon,
+        baseAmount: gift.price,
+        amount: exactAmount,
+        message: (message || '').trim().slice(0, 200),
+        status: 'PENDING',
+        cardDetails: `${cardNumber} (${cardHolder})`
+      }
+    });
+
+    res.json({
+      donationId: donation.id,
+      gift,
+      amount: exactAmount,
+      baseAmount: gift.price,
+      cardNumber,
+      cardHolder,
+      bankName,
+      clickP2pUrl
+    });
+  } catch (err) {
+    console.error('create donation error:', err);
+    res.status(500).json({ error: 'Donat yaratishda xatolik yuz berdi' });
+  }
+});
+
+// 3. Check donation payment status ("To'lov qildim" pressed)
+app.post('/api/live/donate/check/:donationId', async (req, res) => {
+  try {
+    const donationId = Number(req.params.donationId);
+    const donation = await (prisma as any).liveDonation.findUnique({
+      where: { id: donationId }
+    });
+
+    if (!donation) {
+      return res.status(404).json({ error: 'Donat topilmadi' });
+    }
+
+    // Already paid or displayed
+    if (donation.status === 'PAID' || donation.status === 'DISPLAYED') {
+      return res.json({
+        success: true,
+        status: donation.status,
+        displayInSeconds: 30
+      });
+    }
+
+    // Check payment channel or verify payment
+    let paymentFound = false;
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+
+    // If payment channel configured, check if bot can verify
+    if (settings?.paymentChannelId) {
+      // The channel listener automatically catches posts, but we can also check if a matching payment was created
+      // Or check recent payments
+      const recentMatched = await prisma.payment.findFirst({
+        where: { amount: donation.amount, status: 'COMPLETED' }
+      });
+      if (recentMatched) {
+        paymentFound = true;
+      }
+    }
+
+    if (paymentFound) {
+      const paidAt = new Date();
+      const displayAt = new Date(Date.now() + 30000); // 30 seconds after confirmation
+
+      await (prisma as any).liveDonation.update({
+        where: { id: donationId },
+        data: {
+          status: 'PAID',
+          paidAt,
+          displayAt
+        }
+      });
+
+      // Schedule trigger in 30 seconds
+      setTimeout(() => {
+        triggerDonationDisplay(donationId);
+      }, 30000);
+
+      return res.json({
+        success: true,
+        status: 'PAID',
+        displayInSeconds: 30
+      });
+    }
+
+    // Still pending
+    res.json({
+      success: false,
+      status: 'PENDING',
+      message: 'To\'lov hali tizimda ko\'rinmadi. Iltimos 10-15 soniya kuting yoki qayta tekshiring.'
+    });
+  } catch (err) {
+    console.error('check donation error:', err);
+    res.status(500).json({ error: 'Donat holatini tekshirishda xatolik' });
+  }
+});
+
+// 4. Manual confirm donation (for admin/instant confirmation)
+app.post('/api/live/donate/confirm/:donationId', async (req, res) => {
+  try {
+    const donationId = Number(req.params.donationId);
+    const donation = await (prisma as any).liveDonation.findUnique({
+      where: { id: donationId }
+    });
+
+    if (!donation) return res.status(404).json({ error: 'Topilmadi' });
+
+    const paidAt = new Date();
+    const displayAt = new Date(Date.now() + 30000);
+
+    await (prisma as any).liveDonation.update({
+      where: { id: donationId },
+      data: { status: 'PAID', paidAt, displayAt }
+    });
+
+    // Schedule 30-second broadcast
+    setTimeout(() => {
+      triggerDonationDisplay(donationId);
+    }, 30000);
+
+    res.json({ success: true, displayInSeconds: 30 });
+  } catch (err) {
+    res.status(500).json({ error: 'Confirm error' });
+  }
+});
+
+
 // 10. Admin: Manage Streamers
 app.get('/api/admin/streamers', requireAdmin, async (_req, res) => {
   try {

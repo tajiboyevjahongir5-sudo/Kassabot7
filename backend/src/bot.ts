@@ -416,14 +416,63 @@ bot.on('channel_post', async (ctx) => {
     include: { plan: true, user: true }
   });
 
+  const pendingDonations = await (prisma as any).liveDonation.findMany({
+    where: { status: 'PENDING' }
+  });
+
   const extractedNumbers = extractNumbers(text);
   const exactMatches: any[] = [];
+  const exactDonationMatches: any[] = [];
 
-  // Only find exact matches for auto-confirmation
+  // Check matching payments and donations
   for (const num of extractedNumbers) {
     for (const payment of pendingPayments) {
       if (payment.amount === num) {
         exactMatches.push(payment);
+      }
+    }
+    for (const donation of pendingDonations) {
+      if (donation.amount === num) {
+        exactDonationMatches.push(donation);
+      }
+    }
+  }
+
+  // Auto-confirm matched live donations!
+  if (exactDonationMatches.length > 0) {
+    const { triggerDonationDisplay } = await import('./api.js');
+    for (const donation of exactDonationMatches) {
+      try {
+        const paidAt = new Date();
+        const displayAt = new Date(Date.now() + 30000);
+
+        await (prisma as any).liveDonation.update({
+          where: { id: donation.id },
+          data: { status: 'PAID', paidAt, displayAt }
+        });
+
+        await incrementCardTransfer();
+
+        // Schedule 30-second broadcast to live stream
+        setTimeout(() => {
+          triggerDonationDisplay(donation.id);
+        }, 30000);
+
+        // Notify user via Telegram bot
+        if (donation.userId) {
+          ctx.telegram.sendMessage(
+            donation.userId,
+            `🎉 <b>Donat to'lovingiz muvaffaqiyatli qabul qilindi!</b>\n\n` +
+            `🎁 Sovg'a: ${donation.giftIcon} ${donation.giftName}\n` +
+            `💰 Summa: ${donation.amount.toLocaleString()} so'm\n\n` +
+            `⏳ Donatingiz 30 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`,
+            { parse_mode: 'HTML' }
+          ).catch(() => {});
+        }
+
+        console.log(`[DONATION] Auto-confirmed donation #${donation.id} for ${donation.amount} UZS`);
+      } catch (dErr) {
+        console.error('Auto-confirm donation error:', dErr);
       }
     }
   }

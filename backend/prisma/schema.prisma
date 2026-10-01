@@ -153,6 +153,7 @@ model LiveStream {
   startedAt    DateTime      @default(now())
   endedAt      DateTime?
   comments     LiveComment[]
+  donations    LiveDonation[]
 
   @@index([status])
 }
@@ -167,6 +168,29 @@ model LiveComment {
   createdAt DateTime   @default(now())
 
   @@index([streamId])
+}
+
+model LiveDonation {
+  id          Int         @id @default(autoincrement())
+  streamId    Int?
+  stream      LiveStream? @relation(fields: [streamId], references: [id])
+  userId      String
+  userName    String      @default("Mehmon")
+  giftId      String      // masalan 'rose', 'coffee', 'car', 'crown', 'diamond'
+  giftName    String
+  giftIcon    String      // emoji yoki icon
+  amount      Int         // to'lanishi kerak bo'lgan aniq summa (masalan 25123 so'm)
+  baseAmount  Int         // sovg'a asl narxi (masalan 25000)
+  message     String      @default("")
+  status      String      @default("PENDING") // PENDING, PAID, DISPLAYED, CANCELLED
+  cardDetails String?
+  createdAt   DateTime    @default(now())
+  paidAt      DateTime?
+  displayAt   DateTime?
+
+  @@index([status])
+  @@index([streamId])
+  @@index([amount, status])
 }
 
 model Streamer {
