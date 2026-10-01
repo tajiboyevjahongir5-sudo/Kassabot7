@@ -208,6 +208,14 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     return () => clearInterval(interval);
   }, [userId]);
 
+  // Ensure camera stream is attached as soon as broadcasting starts (fixes black screen)
+  useEffect(() => {
+    if (isBroadcasting && localStreamRef.current && localVideoRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [isBroadcasting]);
+
   // 2. Notification Toggle Handler
   const handleToggleNotify = async () => {
     setTogglingNotify(true);
@@ -962,7 +970,13 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       {/* 1. Live Video Element (Full screen cover) */}
       {isBroadcasting ? (
         <video
-          ref={localVideoRef}
+          ref={(el) => {
+            localVideoRef.current = el;
+            if (el && localStreamRef.current && el.srcObject !== localStreamRef.current) {
+              el.srcObject = localStreamRef.current;
+              el.play().catch(() => {});
+            }
+          }}
           autoPlay
           playsInline
           muted
@@ -1365,18 +1379,82 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         ))}
       </div>
 
-      {/* 5. Bottom Comment Input Bar */}
+      {/* 4.5 Floating Action Buttons (Donat & Yurakcha — input ustida, o'ng tarafda teparoqda) */}
+      <div style={{
+        position: 'absolute',
+        bottom: '76px',
+        right: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '10px',
+        zIndex: 45
+      }}>
+        {/* DONAT BUTTON */}
+        <button
+          type="button"
+          onClick={() => {
+            setShowGiftsModal(true);
+            setDonationStep('select');
+          }}
+          style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+            border: '2px solid rgba(254, 240, 138, 0.9)',
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 18px rgba(245, 158, 11, 0.7), 0 0 14px rgba(254, 240, 138, 0.5)',
+            animation: 'pulseDonat 2s infinite',
+            gap: '1px'
+          }}
+          title="Donat qilish"
+        >
+          <Gift size={20} />
+          <span style={{ fontSize: '8px', fontWeight: '900', letterSpacing: '0.3px' }}>
+            DONAT
+          </span>
+        </button>
+
+        {/* Floating Heart / Like Button */}
+        <button
+          type="button"
+          onClick={() => handleSendReaction('❤️')}
+          style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(239, 68, 68, 0.6)'
+          }}
+          title="Yurakcha yuborish"
+        >
+          <Heart size={22} fill="#fff" />
+        </button>
+      </div>
+
+      {/* 5. Bottom Comment Input Bar (O'ng tarafga to'liq cho'zilgan) */}
       <div style={{
         position: 'relative',
         zIndex: 40,
-        padding: '12px 14px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px'
+        padding: '10px 14px 14px 14px',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         <form 
           onSubmit={handleSendComment} 
-          style={{ flex: 1, display: 'flex', alignItems: 'center', position: 'relative' }}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}
         >
           <input
             type="text"
@@ -1385,15 +1463,16 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             onChange={e => setNewComment(e.target.value)}
             style={{
               width: '100%',
-              background: 'rgba(255, 255, 255, 0.15)',
+              background: 'rgba(255, 255, 255, 0.16)',
               backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.25)',
+              border: '1px solid rgba(255, 255, 255, 0.28)',
               borderRadius: '24px',
-              padding: '12px 48px 12px 16px',
+              padding: '12px 50px 12px 18px',
               color: '#fff',
               fontSize: '14px',
               outline: 'none',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.4)'
+              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+              boxSizing: 'border-box'
             }}
           />
           <button
@@ -1402,10 +1481,10 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             style={{
               position: 'absolute',
               right: '6px',
-              width: '34px',
-              height: '34px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
-              background: newComment.trim() ? '#38bdf8' : 'rgba(255,255,255,0.1)',
+              background: newComment.trim() ? '#38bdf8' : 'rgba(255,255,255,0.12)',
               border: 'none',
               color: '#fff',
               display: 'flex',
@@ -1415,70 +1494,9 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
               transition: 'background 0.2s ease'
             }}
           >
-            <Send size={15} />
+            <Send size={16} />
           </button>
         </form>
-
-        {/* Right Buttons: Donat button on top of Heart button */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '8px',
-          flexShrink: 0
-        }}>
-          {/* 1. DONAT BUTTON (Yurakcha tepasida) */}
-          <button
-            type="button"
-            onClick={() => {
-              setShowGiftsModal(true);
-              setDonationStep('select');
-            }}
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-              border: '2px solid rgba(254, 240, 138, 0.8)',
-              color: '#fff',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(245, 158, 11, 0.6)',
-              animation: 'pulseDonat 2s infinite',
-              gap: '1px'
-            }}
-            title="Donat qilish"
-          >
-            <Gift size={18} />
-            <span style={{ fontSize: '7.5px', fontWeight: '900', letterSpacing: '0.3px' }}>
-              DONAT
-            </span>
-          </button>
-
-          {/* 2. Floating Heart / Like Button */}
-          <button
-            type="button"
-            onClick={() => handleSendReaction('❤️')}
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #ef4444, #f43f5e)',
-              border: 'none',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(239, 68, 68, 0.5)'
-            }}
-          >
-            <Heart size={20} fill="#fff" />
-          </button>
-        </div>
       </div>
 
       {/* 6. SOVG'ALAR JAVONI VA DANAT MODAL (Jonli efirni to'liq yopmaydi) */}
