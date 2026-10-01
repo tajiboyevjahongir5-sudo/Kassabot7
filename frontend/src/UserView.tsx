@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Crown, Lock, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Crown, Lock, CheckCircle2, AlertTriangle, Copy, Check, Radio } from 'lucide-react';
+import VideoChat from './VideoChat';
 import './index.css';
 
 // TypeScript interfaces
@@ -23,6 +24,11 @@ interface Channel {
 const tg = (window as any).Telegram?.WebApp;
 
 function UserView() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const initTab = urlParams.get('tab') === 'videochat' || urlParams.get('startapp') === 'videochat' ? 'videochat' : 'subscription';
+  const [currentTab, setCurrentTab] = useState<'subscription' | 'videochat'>(initTab);
+  const [isLiveActive, setIsLiveActive] = useState<boolean>(false);
+
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
@@ -143,6 +149,21 @@ function UserView() {
         if (data.clickP2pUrl) setClickP2pUrl(data.clickP2pUrl);
       })
       .catch(err => console.error(err));
+
+    // Poll live stream status every 10 seconds
+    const checkLive = async () => {
+      try {
+        const res = await fetch(`${API_URL}/live/status`);
+        if (res.ok) {
+          const data = await res.json();
+          setIsLiveActive(Boolean(data.active));
+        }
+      } catch {}
+    };
+    checkLive();
+    const liveInterval = setInterval(checkLive, 10000);
+
+    return () => clearInterval(liveInterval);
   }, []);
 
   const [timeLeft, setTimeLeft] = useState<number>(180);
@@ -261,7 +282,7 @@ function UserView() {
   return (
     <>
       <div className="aurora-bg"></div>
-      <header style={{ marginBottom: '16px' }}>
+      <header style={{ marginBottom: '14px' }}>
         <div className="logo-text">DIORA VIP</div>
         <div className="header-controls">
           <div className="icon-btn">✨</div>
@@ -273,9 +294,97 @@ function UserView() {
         </div>
       </header>
 
+      {/* Navigation Tabs: VIP Obuna & VIDEOCHAT */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        background: 'rgba(255, 255, 255, 0.05)',
+        padding: '4px',
+        borderRadius: '16px',
+        marginBottom: '20px',
+        border: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
+        <button
+          type="button"
+          onClick={() => setCurrentTab('subscription')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: '700',
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            background: currentTab === 'subscription' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'transparent',
+            color: currentTab === 'subscription' ? '#fff' : 'rgba(255, 255, 255, 0.6)',
+            boxShadow: currentTab === 'subscription' ? '0 4px 15px rgba(168, 85, 247, 0.4)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Crown size={15} /> VIP Obuna
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentTab('videochat')}
+          style={{
+            padding: '10px 14px',
+            borderRadius: '12px',
+            border: 'none',
+            fontWeight: '700',
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            background: currentTab === 'videochat' ? 'linear-gradient(135deg, #ef4444, #f43f5e)' : 'transparent',
+            color: currentTab === 'videochat' ? '#fff' : 'rgba(255, 255, 255, 0.6)',
+            boxShadow: currentTab === 'videochat' ? '0 4px 15px rgba(239, 68, 68, 0.4)' : 'none',
+            transition: 'all 0.2s ease',
+            position: 'relative'
+          }}
+        >
+          {isLiveActive ? (
+            <span style={{ 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              background: '#22c55e', 
+              boxShadow: '0 0 8px #22c55e',
+              display: 'inline-block'
+            }} />
+          ) : (
+            <Radio size={15} />
+          )}
+          <span>VIDEOCHAT</span>
+          {isLiveActive && (
+            <span style={{
+              fontSize: '10px',
+              padding: '1px 5px',
+              borderRadius: '6px',
+              background: '#ef4444',
+              color: '#fff',
+              fontWeight: '800'
+            }}>LIVE</span>
+          )}
+        </button>
+      </div>
+
       <main>
-        {activePayment ? (
-          <div className="cyber-card" style={{ padding: '20px', textAlign: 'center' }}>
+        {currentTab === 'videochat' ? (
+          <VideoChat
+            userId={tg?.initDataUnsafe?.user?.id?.toString() || 'anon'}
+            userName={tg?.initDataUnsafe?.user?.first_name || 'Foydalanuvchi'}
+            onBack={() => setCurrentTab('subscription')}
+          />
+        ) : (
+          <>
+            {activePayment ? (
+              <div className="cyber-card" style={{ padding: '20px', textAlign: 'center' }}>
             <h2 className="gradient-title" style={{ fontSize: '22px', marginBottom: '15px' }}>To'lov qilish</h2>
             <div style={{ 
               background: 'linear-gradient(90deg, rgba(255, 170, 0, 0.1), rgba(255, 50, 50, 0.05))', 

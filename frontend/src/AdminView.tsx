@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2 } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2, Video, Radio } from 'lucide-react';
 import './index.css';
 
 
@@ -54,6 +54,14 @@ export default function AdminView() {
   const [newJrCustomMsg, setNewJrCustomMsg] = useState('');
   const [savingJrChannel, setSavingJrChannel] = useState(false);
   const [approvingChannelId, setApprovingChannelId] = useState<string | null>(null);
+
+  // Videochat Streamers & Live Status
+  const [streamers, setStreamers] = useState<any[]>([]);
+  const [adminLiveStream, setAdminLiveStream] = useState<any | null>(null);
+  const [newStreamerUserId, setNewStreamerUserId] = useState('');
+  const [newStreamerName, setNewStreamerName] = useState('');
+  const [newStreamerUsername, setNewStreamerUsername] = useState('');
+  const [savingStreamer, setSavingStreamer] = useState(false);
 
   // Broadcast
   const [broadcastText, setBroadcastText] = useState('');
@@ -509,6 +517,83 @@ export default function AdminView() {
     }
   };
 
+  const fetchStreamersAndLive = async () => {
+    try {
+      const [stRes, liveRes] = await Promise.all([
+        fetch(`${API_URL}/admin/streamers`, { headers }),
+        fetch(`${API_URL}/live/status`)
+      ]);
+      if (stRes.ok) {
+        const data = await stRes.json();
+        setStreamers(data.streamers || []);
+      }
+      if (liveRes.ok) {
+        const lData = await liveRes.json();
+        setAdminLiveStream(lData.active ? lData.stream : null);
+      }
+    } catch (e) {
+      console.error('fetchStreamersAndLive error:', e);
+    }
+  };
+
+  const handleAddStreamer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStreamerUserId.trim()) return alert("User ID kiritilishi shart");
+    setSavingStreamer(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/streamers`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          userId: newStreamerUserId.trim(),
+          name: newStreamerName.trim() || null,
+          username: newStreamerUsername.trim() || null
+        })
+      });
+      if (res.ok) {
+        setNewStreamerUserId('');
+        setNewStreamerName('');
+        setNewStreamerUsername('');
+        fetchStreamersAndLive();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Xatolik");
+      }
+    } catch {
+      alert("Server xatosi");
+    } finally {
+      setSavingStreamer(false);
+    }
+  };
+
+  const handleDeleteStreamer = async (id: number) => {
+    if (!confirm("Haqiqatan ham bu streamerni o'chirmoqchimisiz?")) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/streamers/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (res.ok) {
+        fetchStreamersAndLive();
+      }
+    } catch {}
+  };
+
+  const handleAdminEndLive = async () => {
+    if (!confirm("Haqiqatan ham jonli efirni majburan to'xtatmoqchimisiz?")) return;
+    try {
+      const res = await fetch(`${API_URL}/live/end`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ streamId: adminLiveStream?.id })
+      });
+      if (res.ok) {
+        alert("Efir to'xtatildi!");
+        fetchStreamersAndLive();
+      }
+    } catch {}
+  };
+
   const handlePaymentAction = async (id: number, action: 'confirm' | 'reject') => {
     if (!confirm(`Haqiqatan ham bu to'lovni ${action === 'confirm' ? 'tasdiqlaysizmi' : 'bekor qilasizmi'}?`)) return;
     try {
@@ -581,6 +666,10 @@ export default function AdminView() {
           <div className="admin-tab-icon"><BarChart2 size={24} color={activeTab === 'stats' ? 'var(--accent-cyan)' : '#a855f7'} /></div>
           <div className="admin-tab-label">Statistika</div>
         </div>
+        <div className={`admin-tab-item ${activeTab === 'videochat' ? 'active' : ''}`} onClick={() => { setActiveTab('videochat'); fetchStreamersAndLive(); }}>
+          <div className="admin-tab-icon"><Video size={24} color={activeTab === 'videochat' ? 'var(--accent-cyan)' : '#f43f5e'} /></div>
+          <div className="admin-tab-label">Videochat</div>
+        </div>
         <div className={`admin-tab-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
           <div className="admin-tab-icon"><Settings size={24} color={activeTab === 'settings' ? 'var(--accent-cyan)' : '#ef4444'} /></div>
           <div className="admin-tab-label">Sozlamalar</div>
@@ -588,6 +677,201 @@ export default function AdminView() {
       </div>
 
       <main>
+        {activeTab === 'videochat' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🎥 Videochat & Jonli Efir <span style={{ width: '60px', height: '2px', background: 'linear-gradient(90deg, #f43f5e, transparent)' }}></span>
+              </h2>
+              <button 
+                type="button" 
+                onClick={fetchStreamersAndLive} 
+                className="neon-btn" 
+                style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(255,255,255,0.08)' }}
+              >
+                Yangilash
+              </button>
+            </div>
+
+            {/* Live Status Card */}
+            <div className="cyber-card" style={{ 
+              padding: '18px', 
+              marginBottom: '20px',
+              border: adminLiveStream ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)',
+              background: adminLiveStream 
+                ? 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(20,24,38,0.9) 100%)' 
+                : 'rgba(20,24,38,0.7)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ 
+                      width: '10px', 
+                      height: '10px', 
+                      borderRadius: '50%', 
+                      background: adminLiveStream ? '#ef4444' : '#6b7280',
+                      boxShadow: adminLiveStream ? '0 0 10px #ef4444' : 'none',
+                      display: 'inline-block'
+                    }} />
+                    <span style={{ fontWeight: '800', fontSize: '15px', color: adminLiveStream ? '#f87171' : '#9ca3af' }}>
+                      {adminLiveStream ? '🔴 Jonli Efir Faol' : '⚪ Hozirda efir yo\'q'}
+                    </span>
+                  </div>
+                  {adminLiveStream && (
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>
+                      Streamer: <b>{adminLiveStream.streamerName}</b> (ID: {adminLiveStream.streamerId}) · Tomoshabinlar: <b>{adminLiveStream.viewersCount || 1}</b>
+                    </div>
+                  )}
+                </div>
+
+                {adminLiveStream && (
+                  <button
+                    type="button"
+                    onClick={handleAdminEndLive}
+                    className="neon-btn"
+                    style={{
+                      background: 'linear-gradient(135deg, #ef4444, #991b1b)',
+                      padding: '8px 16px',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🛑 Efirni to'xtatish
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Streamers List */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#60a5fa', margin: 0 }}>
+                  👥 Efirga ruxsat berilgan Streamerlar
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  {streamers.length} ta streamer
+                </span>
+              </div>
+              <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.4', marginBottom: '14px' }}>
+                Admin (ADMIN_ID) har doim avtomatik jonli efir qila oladi. Bu yerda boshqa foydalanuvchilarga ham kamera yoqib jonli efir qilish ruxsatini berishingiz mumkin.
+              </p>
+
+              {streamers.length === 0 ? (
+                <div style={{
+                  padding: '16px',
+                  textAlign: 'center',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px dashed rgba(255,255,255,0.15)',
+                  borderRadius: '12px',
+                  color: 'var(--text-muted)',
+                  fontSize: '12px',
+                  marginBottom: '16px'
+                }}>
+                  Hozircha qo'shimcha streamerlar yo'q. Faqat admin efir qila oladi.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                  {streamers.map((s: any) => (
+                    <div 
+                      key={s.id} 
+                      className="credit-card-item"
+                      style={{
+                        padding: '12px 14px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: 'rgba(20,24,38,0.7)',
+                        borderRadius: '10px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '700', fontSize: '13px', color: '#fff' }}>
+                          🎥 {s.name || 'Streamer'} {s.username ? `(@${s.username})` : ''}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#60a5fa', fontFamily: 'monospace', marginTop: '2px' }}>
+                          Telegram ID: {s.userId}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStreamer(s.id)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(239,68,68,0.3)',
+                          background: 'rgba(239,68,68,0.1)',
+                          color: '#f87171',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add Streamer Form */}
+            <form onSubmit={handleAddStreamer} className="cyber-card" style={{ padding: '16px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#e0b3ff', marginBottom: '12px', margin: 0 }}>
+                ➕ Yangi Streamer qo'shish
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                    Telegram User ID *
+                  </label>
+                  <input
+                    className="cyber-input"
+                    style={{ width: '100%' }}
+                    placeholder="Masalan: 123456789"
+                    required
+                    value={newStreamerUserId}
+                    onChange={e => setNewStreamerUserId(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                      Ismi (ixtiyoriy)
+                    </label>
+                    <input
+                      className="cyber-input"
+                      style={{ width: '100%' }}
+                      placeholder="Masalan: Shahzod"
+                      value={newStreamerName}
+                      onChange={e => setNewStreamerName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                      Username (ixtiyoriy)
+                    </label>
+                    <input
+                      className="cyber-input"
+                      style={{ width: '100%' }}
+                      placeholder="shahzod_stream"
+                      value={newStreamerUsername}
+                      onChange={e => setNewStreamerUsername(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingStreamer}
+                  className="neon-btn"
+                  style={{
+                    marginTop: '6px',
+                    background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                    padding: '10px'
+                  }}
+                >
+                  {savingStreamer ? <div className="spinner"></div> : 'Qo\'shish'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
         {activeTab === 'stats' && (
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>

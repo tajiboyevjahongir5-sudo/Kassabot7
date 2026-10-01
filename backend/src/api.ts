@@ -751,6 +751,369 @@ app.post('/api/admin/join-requests/approve-all', requireAdmin, async (req, res) 
   }
 });
 
+// ==================== VIDEOCHAT & LIVE STREAMING ====================
+
+interface LiveSSEClient {
+  id: string;
+  userId: string;
+  name: string;
+  role: 'streamer' | 'viewer';
+  res: any;
+}
+
+let activeLiveClients: LiveSSEClient[] = [];
+
+function broadcastLiveEvent(eventType: string, data: any, filter?: (client: LiveSSEClient) => boolean) {
+  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of activeLiveClients) {
+    if (!filter || filter(client)) {
+      try {
+        client.res.write(payload);
+      } catch {}
+    }
+  }
+}
+
+async function checkIsStreamer(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const adminEnvRaw = process.env.ADMIN_ID?.trim();
+  const adminIds = adminEnvRaw ? adminEnvRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
+  if (adminIds.includes(String(userId))) return true;
+
+  const streamer = await (prisma as any).streamer.findUnique({
+    where: { userId: String(userId) }
+  });
+  return Boolean(streamer);
+}
+
+// 1. Get current live stream status
+app.get('/api/live/status', async (_req, res) => {
+  try {
+    const activeStream = await (prisma as any).liveStream.findFirst({
+      where: { status: 'ACTIVE' },
+      orderBy: { startedAt: 'desc' },
+      include: {
+        comments: {
+          orderBy: { createdAt: 'desc' },
+          take: 30
+        }
+      }
+    });
+
+    if (!activeStream) {
+      return res.json({ active: false });
+    }
+
+    res.json({
+      active: true,
+      stream: {
+        id: activeStream.id,
+        streamerId: activeStream.streamerId,
+        streamerName: activeStream.streamerName,
+        title: activeStream.title,
+        startedAt: activeStream.startedAt,
+        viewersCount: Math.max(activeLiveClients.filter(c => c.role === 'viewer').length, 1)
+      },
+      recentComments: (activeStream.comments || []).reverse()
+    });
+  } catch (err) {
+    console.error('live status error:', err);
+    res.status(500).json({ error: 'Failed to get live status' });
+  }
+});
+
+// 2. Get user's live notification status and streamer permission
+app.get('/api/live/user-state/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const isStreamer = await checkIsStreamer(userId);
+    const user = await prisma.user.findUnique({ where: { id: String(userId) } });
+
+    res.json({
+      liveNotify: Boolean(user?.liveNotify),
+      isStreamer
+    });
+  } catch (err) {
+    console.error('user live state error:', err);
+    res.status(500).json({ error: 'Failed to get user state' });
+  }
+});
+
+// 3. Toggle user notification for live stream
+app.post('/api/live/toggle-notify', async (req, res) => {
+  try {
+    const { userId, enabled } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    const user = await prisma.user.upsert({
+      where: { id: String(userId) },
+      update: { liveNotify: Boolean(enabled) },
+      create: { id: String(userId), liveNotify: Boolean(enabled) }
+    });
+
+    res.json({ success: true, liveNotify: user.liveNotify });
+  } catch (err) {
+    console.error('toggle notify error:', err);
+    res.status(500).json({ error: 'Failed to update notification setting' });
+  }
+});
+
+// 4. Start a live stream (Streamer only)
+app.post('/api/live/start', async (req, res) => {
+  try {
+    const { streamerId, streamerName, title } = req.body;
+    if (!streamerId) return res.status(400).json({ error: 'streamerId required' });
+
+    const isAuthorized = await checkIsStreamer(streamerId);
+    if (!isAuthorized) {
+      return res.status(403).json({ error: 'Sizga jonli efir boshlash uchun ruxsat berilmagan' });
+    }
+
+    // End previous active streams
+    await (prisma as any).liveStream.updateMany({
+      where: { status: 'ACTIVE' },
+      data: { status: 'ENDED', endedAt: new Date() }
+    });
+
+    const stream = await (prisma as any).liveStream.create({
+      data: {
+        streamerId: String(streamerId),
+        streamerName: streamerName || 'VIP Streamer',
+        title: title || 'VIP Jonli Efir',
+        status: 'ACTIVE'
+      }
+    });
+
+    // Notify all SSE clients
+    broadcastLiveEvent('stream_started', {
+      stream: {
+        id: stream.id,
+        streamerId: stream.streamerId,
+        streamerName: stream.streamerName,
+        title: stream.title,
+        startedAt: stream.startedAt,
+        viewersCount: 1
+      }
+    });
+
+    // Send notifications to users who enabled liveNotify
+    setTimeout(async () => {
+      try {
+        const subscribers = await prisma.user.findMany({
+          where: { liveNotify: true }
+        });
+        const botInfo = await bot.telegram.getMe();
+        for (const sub of subscribers) {
+          if (sub.id === String(streamerId)) continue;
+          bot.telegram.sendMessage(
+            sub.id,
+            `🔴 <b>JONLI EFIR BOSHLANDI!</b>\n\n🎥 VIP videochatda jonli efir boshlandi! Hoziroq kirib tomosha qiling va sharh qoldiring!`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: [[{ text: '📲 EFIRGA KIRISH', url: `https://t.me/${botInfo.username}?startapp=videochat` }]]
+              }
+            }
+          ).catch(() => {});
+        }
+      } catch (notifyErr) {
+        console.error('live start notify error:', notifyErr);
+      }
+    }, 100);
+
+    res.json({ success: true, stream });
+  } catch (err) {
+    console.error('start stream error:', err);
+    res.status(500).json({ error: 'Failed to start stream' });
+  }
+});
+
+// 5. End live stream
+app.post('/api/live/end', async (req, res) => {
+  try {
+    const { streamId, streamerId } = req.body;
+    const isAuthorized = await checkIsStreamer(streamerId);
+    if (!isAuthorized) {
+      return res.status(403).json({ error: 'Ruxsat berilmagan' });
+    }
+
+    if (streamId) {
+      await (prisma as any).liveStream.update({
+        where: { id: Number(streamId) },
+        data: { status: 'ENDED', endedAt: new Date() }
+      }).catch(() => {});
+    } else {
+      await (prisma as any).liveStream.updateMany({
+        where: { status: 'ACTIVE' },
+        data: { status: 'ENDED', endedAt: new Date() }
+      });
+    }
+
+    broadcastLiveEvent('stream_ended', { message: 'Jonli efir yakunlandi' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('end stream error:', err);
+    res.status(500).json({ error: 'Failed to end stream' });
+  }
+});
+
+// 6. SSE Event Stream for Live Videochat
+app.get('/api/live/events', async (req, res) => {
+  const userId = String(req.query.userId || 'anon');
+  const name = String(req.query.name || 'Foydalanuvchi');
+  const role = (req.query.role === 'streamer' ? 'streamer' : 'viewer') as 'streamer' | 'viewer';
+  const clientId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const client: LiveSSEClient = { id: clientId, userId, name, role, res };
+  activeLiveClients.push(client);
+
+  const viewersCount = Math.max(activeLiveClients.filter(c => c.role === 'viewer').length, 1);
+  res.write(`event: init\ndata: ${JSON.stringify({ clientId, viewersCount })}\n\n`);
+
+  broadcastLiveEvent('viewers_count', { count: viewersCount });
+
+  if (role === 'viewer') {
+    broadcastLiveEvent('viewer_joined', { userId, name, clientId }, c => c.role === 'streamer');
+  }
+
+  const heartbeatInterval = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(heartbeatInterval);
+    }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(heartbeatInterval);
+    activeLiveClients = activeLiveClients.filter(c => c.id !== clientId);
+    const updatedCount = Math.max(activeLiveClients.filter(c => c.role === 'viewer').length, 1);
+    broadcastLiveEvent('viewers_count', { count: updatedCount });
+
+    if (role === 'viewer') {
+      broadcastLiveEvent('viewer_left', { userId, clientId }, c => c.role === 'streamer');
+    }
+  });
+});
+
+// 7. Post a live comment
+app.post('/api/live/comment', async (req, res) => {
+  try {
+    const { streamId, userId, userName, text } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Matn bo\'sh' });
+    }
+
+    const commentText = String(text).trim().slice(0, 300);
+    const authorName = String(userName || 'Foydalanuvchi').trim().slice(0, 40);
+
+    let savedCommentId = Date.now();
+    if (streamId) {
+      try {
+        const saved = await (prisma as any).liveComment.create({
+          data: {
+            streamId: Number(streamId),
+            userId: String(userId || 'anon'),
+            userName: authorName,
+            text: commentText
+          }
+        });
+        savedCommentId = saved.id;
+      } catch (dbErr) {
+        console.error('Comment DB error:', dbErr);
+      }
+    }
+
+    const commentData = {
+      id: savedCommentId,
+      streamId,
+      userId: String(userId),
+      userName: authorName,
+      text: commentText,
+      createdAt: new Date().toISOString()
+    };
+
+    broadcastLiveEvent('new_comment', commentData);
+
+    res.json({ success: true, comment: commentData });
+  } catch (err) {
+    console.error('live comment error:', err);
+    res.status(500).json({ error: 'Failed to post comment' });
+  }
+});
+
+// 8. WebRTC Signaling exchange
+app.post('/api/live/signal', (req, res) => {
+  const { targetClientId, targetRole, senderId, type, data } = req.body;
+  
+  if (targetClientId) {
+    broadcastLiveEvent('webrtc_signal', { senderId, type, data }, c => c.id === targetClientId);
+  } else if (targetRole) {
+    broadcastLiveEvent('webrtc_signal', { senderId, type, data }, c => c.role === targetRole);
+  } else {
+    broadcastLiveEvent('webrtc_signal', { senderId, type, data });
+  }
+
+  res.json({ ok: true });
+});
+
+// 9. Frame relay fallback
+app.post('/api/live/frame', (req, res) => {
+  const { frame, streamerId } = req.body;
+  if (!frame) return res.status(400).json({ error: 'Frame required' });
+
+  broadcastLiveEvent('video_frame', { frame }, c => c.role === 'viewer');
+  res.json({ ok: true });
+});
+
+// 10. Admin: Manage Streamers
+app.get('/api/admin/streamers', requireAdmin, async (_req, res) => {
+  try {
+    const streamers = await (prisma as any).streamer.findMany({ orderBy: { id: 'desc' } });
+    const adminEnvRaw = process.env.ADMIN_ID?.trim();
+    const adminIds = adminEnvRaw ? adminEnvRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
+
+    res.json({ streamers, adminIds });
+  } catch (err) {
+    console.error('get streamers error:', err);
+    res.status(500).json({ error: 'Failed to get streamers' });
+  }
+});
+
+app.post('/api/admin/streamers', requireAdmin, async (req, res) => {
+  try {
+    const { userId, username, name } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId kiritilishi shart' });
+
+    const created = await (prisma as any).streamer.upsert({
+      where: { userId: String(userId).trim() },
+      update: { username: username || null, name: name || null },
+      create: { userId: String(userId).trim(), username: username || null, name: name || null }
+    });
+
+    res.json(created);
+  } catch (err) {
+    console.error('add streamer error:', err);
+    res.status(500).json({ error: 'Failed to add streamer' });
+  }
+});
+
+app.delete('/api/admin/streamers/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await (prisma as any).streamer.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('delete streamer error:', err);
+    res.status(500).json({ error: 'Failed to delete streamer' });
+  }
+});
+
 // Get users — paginated (50 per page), with optional search
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {

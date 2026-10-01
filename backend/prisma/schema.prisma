@@ -7,11 +7,12 @@ datasource db {
 }
 
 model User {
-  id        String   @id // Telegram user ID as string
-  username  String?
-  firstName String?
-  subs      Subscription[]
-  payments  Payment[]
+  id         String   @id // Telegram user ID as string
+  username   String?
+  firstName  String?
+  liveNotify Boolean  @default(false)
+  subs       Subscription[]
+  payments   Payment[]
 }
 
 model Channel {
@@ -139,4 +140,38 @@ model PromoCode {
   usedCount     Int      @default(0)
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
+}
+
+model LiveStream {
+  id           Int           @id @default(autoincrement())
+  streamerId   String        // Telegram user ID of streamer
+  streamerName String        @default("Streamer")
+  title        String        @default("VIP Jonli Efir")
+  status       String        @default("ACTIVE") // ACTIVE, ENDED
+  viewersCount Int           @default(0)
+  startedAt    DateTime      @default(now())
+  endedAt      DateTime?
+  comments     LiveComment[]
+
+  @@index([status])
+}
+
+model LiveComment {
+  id        Int        @id @default(autoincrement())
+  streamId  Int
+  stream    LiveStream @relation(fields: [streamId], references: [id])
+  userId    String
+  userName  String
+  text      String
+  createdAt DateTime   @default(now())
+
+  @@index([streamId])
+}
+
+model Streamer {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  username  String?
+  name      String?
+  addedAt   DateTime @default(now())
 }

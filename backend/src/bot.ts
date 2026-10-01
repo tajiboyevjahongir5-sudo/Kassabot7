@@ -85,15 +85,36 @@ bot.start(async (ctx) => {
   }
 
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
-  await ctx.reply(
-    `👋 *Diora Vip kanaliga qo'shilmoqchi bo'lsangiz pastdagi tugma orqali obuna sotib oling*`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [[{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }]]
+  const payload = ctx.message && 'text' in ctx.message ? ctx.message.text.split(' ')[1] : '';
+  const isVideochat = payload === 'videochat';
+
+  if (isVideochat) {
+    await ctx.reply(
+      `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing!`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}?tab=videochat` } }],
+            [{ text: '💎 VIP Obuna sotib olish', web_app: { url: webAppUrl } }]
+          ]
+        }
       }
-    }
-  );
+    );
+  } else {
+    await ctx.reply(
+      `👋 *Diora Vip kanaliga qo'shilmoqchi bo'lsangiz pastdagi tugma orqali obuna sotib oling*`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '💎 Obuna bo\'lish', web_app: { url: webAppUrl } }],
+            [{ text: '🔴 Videochat (Jonli efir)', web_app: { url: `${webAppUrl}?tab=videochat` } }]
+          ]
+        }
+      }
+    );
+  }
 });
 
 bot.command('admin', async (ctx) => {
