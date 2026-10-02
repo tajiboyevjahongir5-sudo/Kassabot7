@@ -354,11 +354,12 @@ export const recentChannelPosts: ChannelPostLog[] = [];
 
 export function textContainsAmount(text: string, amount: number): boolean {
   if (!text || !amount) return false;
-  const cleanText = text.replace(/[\u202F\u00A0\s]+/g, ' ').trim();
+  // Replace non-breaking spaces, thin spaces, and multiple whitespace with ordinary space
+  const cleanText = text.replace(/[\u202F\u00A0\u200B\u200C\s]+/g, ' ').trim();
   const str = String(amount);
-  const withSpaces = str.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // "5 935"
-  const withCommas = str.replace(/\B(?=(\d{3})+(?!\d))/g, ','); // "5,935"
-  const withDots = str.replace(/\B(?=(\d{3})+(?!\d))/g, '.');   // "5.935"
+  const withSpaces = str.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // "25 123"
+  const withCommas = str.replace(/\B(?=(\d{3})+(?!\d))/g, ','); // "25,123"
+  const withDots = str.replace(/\B(?=(\d{3})+(?!\d))/g, '.');   // "25.123"
 
   const patterns = [
     new RegExp(`(?:^|\\D)${str}(?:[.,]00)?(?:\\D|$)`),
@@ -367,7 +368,16 @@ export function textContainsAmount(text: string, amount: number): boolean {
     new RegExp(`(?:^|\\D)${withDots.replace(/\./g, '[,.]')}(?:[.,]00)?(?:\\D|$)`)
   ];
 
-  return patterns.some(p => p.test(cleanText));
+  if (patterns.some(p => p.test(cleanText))) return true;
+
+  // Secondary check: remove decimal .00 or ,00 and squash delimiters between digits
+  const noCents = cleanText.replace(/[,.]00(?=\D|$)/g, '');
+  const digitsSquashed = noCents.replace(/(\d)[\s,.]+(?=\d)/g, '$1');
+  if (new RegExp(`(?:^|\\D)${str}(?:\\D|$)`).test(digitsSquashed)) {
+    return true;
+  }
+
+  return false;
 }
 
 function extractNumbers(text: string): number[] {
@@ -437,66 +447,47 @@ export async function confirmLiveDonation(donationId: number, confirmedBy: strin
   }
 }
 
-export function matchesChannelId(savedId: string | null | undefined, currentId: string | number | null | undefined): boolean {
-  if (!savedId || !currentId) return false;
+export function matchesChannelId(
+  savedId: string | null | undefined, 
+  currentId: string | number | null | undefined,
+  currentUsername?: string | null,
+  currentTitle?: string | null
+): boolean {
+  if (!savedId) return false;
   const s = String(savedId).trim();
-  const c = String(currentId).trim();
-  if (s === c) return true;
-  const cleanS = s.replace(/^-100/, '').replace(/^-/, '');
-  const cleanC = c.replace(/^-100/, '').replace(/^-/, '');
-  return cleanS === cleanC;
+  if (!s) return false;
+
+  const c = currentId ? String(currentId).trim() : '';
+
+  // 1. Direct exact match
+  if (c && s === c) return true;
+
+  // 2. Username comparison (e.g. "@tolovlar_kanali", "https://t.me/tolovlar_kanali")
+  const cleanSUser = s.toLowerCase().replace(/^https?:\/\/t\.me\//, '').replace(/^@/, '').trim();
+  if (currentUsername) {
+    const cleanCurrentUsername = String(currentUsername).toLowerCase().replace(/^@/, '').trim();
+    if (cleanSUser && cleanSUser === cleanCurrentUsername) return true;
+  }
+
+  // 3. Numeric ID comparison (strips -100 or - prefix)
+  const cleanS = s.replace(/^-100/, '').replace(/^-/, '').trim();
+  const cleanC = c.replace(/^-100/, '').replace(/^-/, '').trim();
+  if (cleanS && cleanC && cleanS === cleanC) return true;
+
+  // 4. Channel Title comparison (in case admin entered the channel's title)
+  if (currentTitle && s.toLowerCase() === String(currentTitle).toLowerCase().trim()) return true;
+
+  return false;
 }
 
-// ============ CHANNEL POST LISTENER (Auto-verify payments) ============
-
-bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
-  const channelId = ctx.chat.id.toString();
-  const cp = (ctx.channelPost || (ctx as any).editedChannelPost) as any;
-  const text = cp?.text || cp?.caption || "";
-
-  // 1. Check if this is a Log Channel for a mandatory Bot
-  try {
-    const isLogChannel = await prisma.mandatoryChannel.findFirst({ where: { channelId, type: 'BOT' } });
-    if (isLogChannel) {
-      let extractedUserId: string | null = null;
-      
-      // Check forward
-      if (cp.forward_from && cp.forward_from.id) {
-        extractedUserId = cp.forward_from.id.toString();
-      }
-      // Check entities (text_mention)
-      else if (cp.entities) {
-        for (const ent of cp.entities) {
-          if (ent.type === 'text_mention' && ent.user) {
-            extractedUserId = ent.user.id.toString();
-            break;
-          }
-        }
-      }
-      // Check regex for ID: 1234567
-      if (!extractedUserId && text) {
-        const match = text.match(/id:?\s*(\d{5,15})/i);
-        if (match) extractedUserId = match[1];
-      }
-
-      if (extractedUserId) {
-        await prisma.botSubscriber.upsert({
-          where: { userId_logChannelId: { userId: extractedUserId, logChannelId: channelId } },
-          update: {},
-          create: { userId: extractedUserId, logChannelId: channelId }
-        });
-        console.log(`[BOT SUBSCRIBER] Saved user ${extractedUserId} for log channel ${channelId}`);
-      }
-    }
-  } catch (err) {
-    console.error("Bot log channel parsing error:", err);
-  }
-});
+// ============ INCOMING PAYMENT PROCESSOR ============
 
 export async function processIncomingPaymentText(text: string, channelId: string) {
   if (!text) return;
 
   const extractedNumbers = extractNumbers(text);
+  console.log(`[PROCESS PAYMENT TEXT] Chat ${channelId}: "${text.slice(0, 100)}"`);
+  console.log(`[EXTRACTED NUMBERS]:`, extractedNumbers);
 
   // Store in recent channel post buffer (keep last 100 for async checks)
   recentChannelPosts.unshift({
@@ -517,10 +508,15 @@ export async function processIncomingPaymentText(text: string, channelId: string
     where: { status: 'PENDING' }
   });
 
+  console.log(`[PENDING COUNTS] Subscriptions: ${pendingPayments.length}, Donations: ${pendingDonations.length}`);
+  if (pendingDonations.length > 0) {
+    console.log(`[ACTIVE PENDING DONATIONS]:`, pendingDonations.map((d: any) => `#${d.id}: ${d.amount} UZS (${d.userName})`));
+  }
+
   const exactMatches: any[] = [];
   const exactDonationMatches: any[] = [];
 
-  // Check matching payments and donations
+  // Check matching payments and donations by extracted numbers
   for (const num of extractedNumbers) {
     for (const payment of pendingPayments) {
       if (payment.amount === num) {
@@ -537,11 +533,19 @@ export async function processIncomingPaymentText(text: string, channelId: string
   // Also check direct text pattern match for any pending donation amount (e.g. "5 935" or "5,935")
   for (const donation of pendingDonations) {
     if (textContainsAmount(text, donation.amount) && !exactDonationMatches.some(d => d.id === donation.id)) {
+      console.log(`[MATCH FOUND] Donation #${donation.id} (${donation.amount} UZS) matched text via textContainsAmount`);
       exactDonationMatches.push(donation);
     }
   }
 
-  // Deduplicate matched donations to prevent duplicate alerts and double counting
+  for (const payment of pendingPayments) {
+    if (textContainsAmount(text, payment.amount) && !exactMatches.some(p => p.id === payment.id)) {
+      console.log(`[MATCH FOUND] Subscription #${payment.id} (${payment.amount} UZS) matched text via textContainsAmount`);
+      exactMatches.push(payment);
+    }
+  }
+
+  // Deduplicate matched donations to prevent duplicate alerts
   const uniqueDonationMatches = exactDonationMatches.filter((d, index, self) => 
     self.findIndex(t => t.id === d.id) === index
   );
@@ -549,7 +553,8 @@ export async function processIncomingPaymentText(text: string, channelId: string
   // Auto-confirm matched live donations!
   if (uniqueDonationMatches.length > 0) {
     for (const donation of uniqueDonationMatches) {
-      await confirmLiveDonation(donation.id, 'SMS_GATEWAY');
+      console.log(`[REALTIME CONFIRM] Auto-confirming donation #${donation.id} for ${donation.userName} (${donation.amount} UZS)`);
+      await confirmLiveDonation(donation.id, `REALTIME_CHANNEL_${channelId}`);
     }
   }
 
@@ -604,27 +609,90 @@ export async function processIncomingPaymentText(text: string, channelId: string
   }
 }
 
-// 2. Check if this is the Payment Verification channel (supports -100 prefix or without)
-bot.on(['channel_post', 'edited_channel_post'], async (ctx) => {
+// ============ UNIFIED CHANNEL POST LISTENER ============
+
+bot.on(['channel_post', 'edited_channel_post'], async (ctx, next) => {
   const channelId = ctx.chat.id.toString();
   const cp = (ctx.channelPost || (ctx as any).editedChannelPost) as any;
   const text = cp?.text || cp?.caption || "";
+  const chatUsername = (ctx.chat as any)?.username || "";
+  const chatTitle = (ctx.chat as any)?.title || "";
 
-  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  if (settings && matchesChannelId(settings.paymentChannelId, channelId) && text) {
-    await processIncomingPaymentText(text, channelId);
+  console.log(`[CHANNEL POST RECEIVED] Chat: ${channelId} (@${chatUsername || 'no_user'}, "${chatTitle}"): "${text ? text.slice(0, 100) : '[empty]'}"`);
+
+  // 1. Check if this is a Log Channel for a mandatory Bot
+  try {
+    const isLogChannel = await prisma.mandatoryChannel.findFirst({ where: { channelId, type: 'BOT' } });
+    if (isLogChannel) {
+      let extractedUserId: string | null = null;
+      if (cp.forward_from && cp.forward_from.id) {
+        extractedUserId = cp.forward_from.id.toString();
+      } else if (cp.entities) {
+        for (const ent of cp.entities) {
+          if (ent.type === 'text_mention' && ent.user) {
+            extractedUserId = ent.user.id.toString();
+            break;
+          }
+        }
+      }
+      if (!extractedUserId && text) {
+        const match = text.match(/id:?\s*(\d{5,15})/i);
+        if (match) extractedUserId = match[1];
+      }
+      if (extractedUserId) {
+        await prisma.botSubscriber.upsert({
+          where: { userId_logChannelId: { userId: extractedUserId, logChannelId: channelId } },
+          update: {},
+          create: { userId: extractedUserId, logChannelId: channelId }
+        });
+        console.log(`[BOT SUBSCRIBER] Saved user ${extractedUserId} for log channel ${channelId}`);
+      }
+    }
+  } catch (err) {
+    console.error("Bot log channel parsing error:", err);
   }
+
+  // 2. Realtime Payment Verification check
+  if (text) {
+    try {
+      console.log(`[PAYMENT CHECK] Processing channel post from ${channelId}...`);
+      await processIncomingPaymentText(text, channelId);
+    } catch (paymentErr) {
+      console.error("[PAYMENT ERROR] Error processing channel post text:", paymentErr);
+    }
+  }
+
+  if (next) return next();
 });
 
-// Also listen on group messages in case SMS gateway sends SMS to a Telegram Group instead of a Channel
-bot.on('message', async (ctx, next) => {
+// Also listen on group messages or private chat messages
+bot.on(['message', 'edited_message'], async (ctx, next) => {
   const channelId = ctx.chat?.id?.toString() || "";
-  if (channelId) {
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    if (settings && matchesChannelId(settings.paymentChannelId, channelId)) {
-      const text = (ctx.message as any)?.text || (ctx.message as any)?.caption || "";
-      if (text) {
-        await processIncomingPaymentText(text, channelId);
+  const chatType = ctx.chat?.type;
+  const text = (ctx.message as any)?.text || (ctx.message as any)?.caption || (ctx as any)?.editedMessage?.text || (ctx as any)?.editedMessage?.caption || "";
+
+  if (channelId && text) {
+    // If sent in a group / supergroup
+    if (chatType && chatType !== 'private') {
+      const chatUsername = (ctx.chat as any)?.username || "";
+      const chatTitle = (ctx.chat as any)?.title || "";
+      console.log(`[GROUP POST RECEIVED] Chat: ${channelId} (@${chatUsername}, "${chatTitle}"): "${text.slice(0, 100)}"`);
+      await processIncomingPaymentText(text, channelId);
+    } 
+    // If sent directly in private chat by admin or donor
+    else if (chatType === 'private') {
+      const fromId = ctx.from?.id?.toString() || "";
+      const isSenderAdmin = isAdmin(fromId);
+      const numbers = extractNumbers(text);
+      const pendingDonations = await (prisma as any).liveDonation.findMany({ where: { status: 'PENDING' } });
+      const matchedDonation = pendingDonations.find((d: any) => 
+        textContainsAmount(text, d.amount) || numbers.includes(d.amount)
+      );
+
+      if (matchedDonation && (isSenderAdmin || matchedDonation.userId === fromId)) {
+        console.log(`[PRIVATE CHAT PAYMENT] Matched donation #${matchedDonation.id} (${matchedDonation.amount} UZS) via private message from ${fromId}`);
+        await confirmLiveDonation(matchedDonation.id, `PRIVATE_MSG_${fromId}`);
+        await ctx.reply(`✅ <b>To'lov tasdiqlandi!</b>\n\n${matchedDonation.amount.toLocaleString()} so'mlik donatingiz 30 sekunddan keyin jonli efirda chiqadi!`, { parse_mode: 'HTML' });
         return;
       }
     }

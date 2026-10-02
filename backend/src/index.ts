@@ -37,8 +37,8 @@ async function main() {
   // Start Telegram bot
   if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== 'dummy') {
     try {
-      await bot.launch({ allowedUpdates: ['message', 'channel_post', 'callback_query', 'chat_join_request'] });
-      console.log('[SERVER] Telegram bot started.');
+      await bot.launch({ allowedUpdates: ['message', 'edited_message', 'channel_post', 'edited_channel_post', 'callback_query', 'chat_join_request'] });
+      console.log('[SERVER] Telegram bot started with realtime payment updates.');
 
       // Update Telegram Menu Button with cache-busting timestamp
       const webAppUrl = process.env.WEBAPP_URL;
