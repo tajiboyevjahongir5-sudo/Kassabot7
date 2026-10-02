@@ -25,8 +25,11 @@ export interface DonationGift {
   icon: string;
   price: number;
   description: string;
-  animClass: string;
-  glowColor: string;
+  animClass?: string;
+  glowColor?: string;
+  type?: 'EMOJI' | 'VIDEO';
+  mediaUrl?: string | null;
+  duration?: number;
 }
 
 export const DONATION_GIFTS: DonationGift[] = [
@@ -190,6 +193,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
   // Donation States
   const [availableGifts, setAvailableGifts] = useState<DonationGift[]>(DONATION_GIFTS);
+  const [activeGiftTab, setActiveGiftTab] = useState<'EMOJI' | 'VIDEO'>('EMOJI');
   const [showGiftsModal, setShowGiftsModal] = useState<boolean>(false);
   const [donationStep, setDonationStep] = useState<'select' | 'compose' | 'payment' | 'success'>('select');
   const [selectedGift, setSelectedGift] = useState<DonationGift | null>(null);
@@ -362,7 +366,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     }
   }, []);
 
-  // Donation alert queue processor (guarantees no collisions, 9s display with smooth 0.5s exit)
+  // Donation alert queue processor (guarantees no collisions, handles emoji and audio-video gifts)
   const processNextDonation = () => {
     if (isProcessingDonationRef.current) return;
     if (donationQueueRef.current.length === 0) {
@@ -376,16 +380,23 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     setIsAlertClosing(false);
     setCurrentDonationAlert(nextDonation);
 
-    // 1. Play audio chime and human-like voice
-    playDonationChime();
-    speakDonationMessage(nextDonation.userName, nextDonation.amount, nextDonation.message);
+    const isVideo = nextDonation.giftType === 'VIDEO' && !!nextDonation.mediaUrl;
+    const durationSeconds = (nextDonation.duration && nextDonation.duration >= 3) ? nextDonation.duration : (isVideo ? 10 : 8.5);
 
-    // 2. Start smooth closing after 8.5 seconds (0.5s fade out animation for total 9s)
+    // 1. Play audio chime
+    playDonationChime();
+
+    // 2. Only use TTS speech synthesis for emoji donations with messages (so it doesn't talk over video audio)
+    if (!isVideo) {
+      speakDonationMessage(nextDonation.userName, nextDonation.amount, nextDonation.message);
+    }
+
+    // 3. Start smooth closing after the alert duration
     if (alertDismissTimerRef.current) clearTimeout(alertDismissTimerRef.current);
     alertDismissTimerRef.current = setTimeout(() => {
       setIsAlertClosing(true);
 
-      // 3. Complete close at 9.0s and schedule next queued donation
+      // Complete close at 0.5s fade out and schedule next queued donation
       if (alertNextTimerRef.current) clearTimeout(alertNextTimerRef.current);
       alertNextTimerRef.current = setTimeout(() => {
         setCurrentDonationAlert(null);
@@ -396,7 +407,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           processNextDonation();
         }, 300);
       }, 500);
-    }, 8500);
+    }, durationSeconds * 1000);
   };
 
   const enqueueDonationAlert = (donation: any) => {
@@ -1959,71 +1970,164 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
       {/* 2.5 DONATION ALERT BANNER (Jonli efirda o'tirgan barchaga chiqadigan chiroyli animatsiyali alert) */}
       {currentDonationAlert && (
-        <div style={{
-          position: 'absolute',
-          top: '72px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 90,
-          width: '90%',
-          maxWidth: '360px',
-          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95))',
-          backdropFilter: 'blur(16px)',
-          borderRadius: '18px',
-          padding: '12px 16px',
-          border: '2px solid rgba(254, 240, 138, 0.9)',
-          boxShadow: '0 10px 30px rgba(245, 158, 11, 0.6), 0 0 25px rgba(254, 240, 138, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          animation: isAlertClosing 
-            ? 'donationBannerOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards' 
-            : 'donationBannerIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-          pointerEvents: 'none'
-        }}>
+        currentDonationAlert.giftType === 'VIDEO' && currentDonationAlert.mediaUrl ? (
+          /* OVOZLI VIDEO / GIF DONAT ALERT */
           <div style={{
-            fontSize: '36px',
-            lineHeight: 1,
-            animation: 'bounceGift 1s infinite alternate',
-            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
+            position: 'absolute',
+            top: '70px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 95,
+            width: '92%',
+            maxWidth: '360px',
+            background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(30, 27, 75, 0.96))',
+            backdropFilter: 'blur(20px)',
+            borderRadius: '20px',
+            padding: '12px',
+            border: '2px solid rgba(168, 85, 247, 0.9)',
+            boxShadow: '0 12px 36px rgba(168, 85, 247, 0.5), 0 0 25px rgba(139, 92, 246, 0.4)',
+            animation: isAlertClosing 
+              ? 'donationBannerOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards' 
+              : 'donationBannerIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            pointerEvents: 'auto'
           }}>
-            {currentDonationAlert.giftIcon || '🎁'}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: '900', fontSize: '13px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-                {currentDonationAlert.userName}
-              </span>
-              <span style={{
-                background: '#ffffff',
-                color: '#b45309',
-                fontSize: '11px',
-                fontWeight: '800',
-                padding: '1px 6px',
-                borderRadius: '10px'
+            {/* Header: User name, amount, badge */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                <span style={{ fontSize: '20px', lineHeight: 1 }}>{currentDonationAlert.giftIcon || '🎬'}</span>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontWeight: '900', fontSize: '13.5px', color: '#fff' }}>
+                    {currentDonationAlert.userName}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#c084fc', marginLeft: '5px', fontWeight: '700' }}>
+                    video donat qildi!
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                color: '#fff',
+                fontSize: '11.5px',
+                fontWeight: '900',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                boxShadow: '0 2px 8px rgba(168, 85, 247, 0.4)',
+                flexShrink: 0
               }}>
                 {Number(currentDonationAlert.amount).toLocaleString()} so'm
-              </span>
-            </div>
-            <div style={{ fontSize: '11px', color: '#fef08a', fontWeight: '700', marginTop: '1px' }}>
-              {currentDonationAlert.giftName} sovg'a qildi!
-            </div>
-            {currentDonationAlert.message && (
-              <div style={{
-                fontSize: '12px',
-                color: '#ffffff',
-                fontWeight: '600',
-                marginTop: '4px',
-                lineHeight: '1.3',
-                background: 'rgba(0,0,0,0.2)',
-                padding: '4px 8px',
-                borderRadius: '8px',
-                wordBreak: 'break-word'
-              }}>
-                "{currentDonationAlert.message}"
               </div>
-            )}
+            </div>
+
+            {/* Video player playing with its own audio */}
+            <div style={{ position: 'relative', width: '100%', height: '190px', borderRadius: '14px', overflow: 'hidden', background: '#000' }}>
+              <video
+                ref={(el) => {
+                  if (el) {
+                    el.muted = false;
+                    el.volume = 1.0;
+                    el.play().catch(() => {
+                      // Fallback if browser restricts unmuted autoplay before user interaction
+                      el.muted = true;
+                      el.play().catch(() => {});
+                    });
+                  }
+                }}
+                src={currentDonationAlert.mediaUrl}
+                autoPlay
+                playsInline
+                loop={false}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+              <div style={{
+                position: 'absolute',
+                bottom: '6px',
+                left: '8px',
+                background: 'rgba(0,0,0,0.65)',
+                backdropFilter: 'blur(8px)',
+                color: '#fef08a',
+                fontSize: '11px',
+                fontWeight: '800',
+                padding: '2px 8px',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <span>🔊 {currentDonationAlert.giftName}</span>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* STANDART EMOJI SOVG'A ALERT */
+          <div style={{
+            position: 'absolute',
+            top: '72px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 90,
+            width: '90%',
+            maxWidth: '360px',
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95))',
+            backdropFilter: 'blur(16px)',
+            borderRadius: '18px',
+            padding: '12px 16px',
+            border: '2px solid rgba(254, 240, 138, 0.9)',
+            boxShadow: '0 10px 30px rgba(245, 158, 11, 0.6), 0 0 25px rgba(254, 240, 138, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            animation: isAlertClosing 
+              ? 'donationBannerOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards' 
+              : 'donationBannerIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+            pointerEvents: 'none'
+          }}>
+            <div style={{
+              fontSize: '36px',
+              lineHeight: 1,
+              animation: 'bounceGift 1s infinite alternate',
+              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
+            }}>
+              {currentDonationAlert.giftIcon || '🎁'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: '900', fontSize: '13px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                  {currentDonationAlert.userName}
+                </span>
+                <span style={{
+                  background: '#ffffff',
+                  color: '#b45309',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  padding: '1px 6px',
+                  borderRadius: '10px'
+                }}>
+                  {Number(currentDonationAlert.amount).toLocaleString()} so'm
+                </span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#fef08a', fontWeight: '700', marginTop: '1px' }}>
+                {currentDonationAlert.giftName} sovg'a qildi!
+              </div>
+              {currentDonationAlert.message && (
+                <div style={{
+                  fontSize: '12px',
+                  color: '#ffffff',
+                  fontWeight: '600',
+                  marginTop: '4px',
+                  lineHeight: '1.3',
+                  background: 'rgba(0,0,0,0.2)',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  wordBreak: 'break-word'
+                }}>
+                  "{currentDonationAlert.message}"
+                </div>
+              )}
+            </div>
+          </div>
+        )
       )}
 
       {/* Spacer to push comments to bottom */}
@@ -2334,64 +2438,206 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                   </button>
                 </div>
 
-                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 14px 0' }}>
-                  Streamerga sovg'a yuboring! Sovg'angiz efirda chiqadi va xabaringiz ovoz bilan o'qiladi:
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', background: 'rgba(255,255,255,0.06)', padding: '4px', borderRadius: '14px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveGiftTab('EMOJI')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: activeGiftTab === 'EMOJI' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+                      color: activeGiftTab === 'EMOJI' ? '#fff' : 'rgba(255,255,255,0.65)',
+                      fontWeight: '800',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>🎁 Sovg'alar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveGiftTab('VIDEO')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: activeGiftTab === 'VIDEO' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'transparent',
+                      color: activeGiftTab === 'VIDEO' ? '#fff' : 'rgba(255,255,255,0.65)',
+                      fontWeight: '800',
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>🎬 Ovozli GIF / Video</span>
+                  </button>
+                </div>
+
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.65)', margin: '0 0 14px 0', lineHeight: '1.4' }}>
+                  {activeGiftTab === 'VIDEO' 
+                    ? 'Ovozli video yoki GIF tanlang. Jonli efirda o\'z audiosi va ovozi bilan yangraydi:'
+                    : 'Streamerga sovg\'a yuboring! Sovg\'angiz efirda chiqadi va xabaringiz ovoz bilan o\'qiladi:'}
                 </p>
 
-                {/* Gifts Grid (4 columns) with live animations */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '8px'
-                }}>
-                  {availableGifts.map(gift => (
-                    <div
-                      key={gift.id}
-                      onClick={() => handleSelectGift(gift)}
-                      className="gift-card-hover"
-                      style={{
-                        background: 'radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
-                        border: '1px solid rgba(245, 158, 11, 0.3)',
-                        borderRadius: '16px',
-                        padding: '10px 4px',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.25s ease',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '4px',
-                        position: 'relative'
-                      }}
-                    >
-                      <div className={gift.animClass || 'anim-bounce'} style={{
-                        fontSize: '32px',
-                        lineHeight: 1,
-                        filter: `drop-shadow(0 0 10px ${gift.glowColor || 'rgba(245, 158, 11, 0.8)'})`,
-                        display: 'inline-block'
-                      }}>
-                        {gift.icon}
-                      </div>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
-                        {gift.name}
-                      </div>
-                      <div style={{
-                        fontSize: '10px',
-                        fontWeight: '800',
-                        color: '#fef08a',
-                        background: 'rgba(245, 158, 11, 0.2)',
-                        padding: '1px 6px',
-                        borderRadius: '10px'
-                      }}>
-                        {gift.price.toLocaleString()} so'm
-                      </div>
+                {/* Gifts Grid */}
+                {activeGiftTab === 'VIDEO' ? (
+                  /* 🎬 Ovozli Video / GIF Grid */
+                  availableGifts.filter(g => g.type === 'VIDEO').length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>
+                      🎬 Hozircha ovozli video sovg'alar qo'shilmagan.
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, 1fr)',
+                      gap: '10px',
+                      maxHeight: '340px',
+                      overflowY: 'auto'
+                    }}>
+                      {availableGifts.filter(g => g.type === 'VIDEO').map(gift => (
+                        <div
+                          key={gift.id}
+                          onClick={() => handleSelectGift(gift)}
+                          className="gift-card-hover"
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1.5px solid rgba(168, 85, 247, 0.4)',
+                            borderRadius: '16px',
+                            padding: '10px',
+                            cursor: 'pointer',
+                            transition: 'all 0.25s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: '95px',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            background: '#000',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            {gift.mediaUrl ? (
+                              <video
+                                src={gift.mediaUrl}
+                                muted
+                                loop
+                                autoPlay
+                                playsInline
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: '32px' }}>🎬</span>
+                            )}
+                            <div style={{
+                              position: 'absolute',
+                              top: '4px',
+                              right: '4px',
+                              background: 'rgba(0,0,0,0.7)',
+                              backdropFilter: 'blur(4px)',
+                              color: '#a7f3d0',
+                              fontSize: '9.5px',
+                              fontWeight: '800',
+                              padding: '1px 6px',
+                              borderRadius: '6px'
+                            }}>
+                              🔊 Ovozli
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: '800', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {gift.name}
+                            </div>
+                            <div style={{
+                              fontSize: '11px',
+                              fontWeight: '900',
+                              color: '#c084fc',
+                              marginTop: '2px'
+                            }}>
+                              {gift.price.toLocaleString()} so'm
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  /* 🎁 Oddiy Emoji Sovg'alar Grid */
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '8px',
+                    maxHeight: '340px',
+                    overflowY: 'auto'
+                  }}>
+                    {availableGifts.filter(g => g.type !== 'VIDEO').map(gift => (
+                      <div
+                        key={gift.id}
+                        onClick={() => handleSelectGift(gift)}
+                        className="gift-card-hover"
+                        style={{
+                          background: 'radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          borderRadius: '16px',
+                          padding: '10px 4px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px',
+                          position: 'relative'
+                        }}
+                      >
+                        <div className={gift.animClass || 'anim-bounce'} style={{
+                          fontSize: '32px',
+                          lineHeight: 1,
+                          filter: `drop-shadow(0 0 10px ${gift.glowColor || 'rgba(245, 158, 11, 0.8)'})`,
+                          display: 'inline-block'
+                        }}>
+                          {gift.icon}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                          {gift.name}
+                        </div>
+                        <div style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          color: '#fef08a',
+                          background: 'rgba(245, 158, 11, 0.2)',
+                          padding: '1px 6px',
+                          borderRadius: '10px'
+                        }}>
+                          {gift.price.toLocaleString()} so'm
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* ================= STEP 2: TANLANGAN SOVG'A VA XABAR YOZISH ================= */}
+            {/* ================= STEP 2: TANLANGAN SOVG'A (VIDEO YOKI EMOJI) ================= */}
             {donationStep === 'compose' && selectedGift && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -2436,89 +2682,143 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                   </button>
                 </div>
 
-                {/* Tanlangan sovg'a ekran o'rtasiga kattalashib va aylanuvchi nur bilan kelgan holati */}
-                <div style={{
-                  textAlign: 'center',
-                  padding: '18px 12px',
-                  background: 'radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(0,0,0,0) 70%)',
-                  borderRadius: '16px',
-                  marginBottom: '14px',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
-                  {/* Rotating Sunburst Halo Background */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '40%',
-                    left: '50%',
-                    width: '160px',
-                    height: '160px',
-                    borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(254, 240, 138, 0.4) 0%, rgba(245, 158, 11, 0.1) 50%, rgba(0,0,0,0) 70%)',
-                    transform: 'translate(-50%, -50%)',
-                    animation: 'pulseGlow 2s infinite alternate',
-                    pointerEvents: 'none'
-                  }} />
-
-                  <div className={selectedGift.animClass || 'anim-bounce'} style={{
-                    fontSize: '72px',
-                    lineHeight: 1,
-                    animation: 'bigGiftCelebration 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                    filter: `drop-shadow(0 0 20px ${selectedGift.glowColor || 'rgba(245, 158, 11, 0.9)'})`,
-                    display: 'inline-block',
-                    position: 'relative',
-                    zIndex: 2
-                  }}>
-                    {selectedGift.icon}
-                  </div>
-                  <h4 style={{ fontSize: '18px', fontWeight: '900', color: '#fff', margin: '10px 0 3px 0', position: 'relative', zIndex: 2 }}>
-                    {selectedGift.name}
-                  </h4>
-                  <div style={{
-                    display: 'inline-block',
-                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.3))',
-                    border: '1.5px solid rgba(254, 240, 138, 0.7)',
-                    color: '#fef08a',
-                    fontWeight: '900',
-                    fontSize: '14px',
-                    padding: '3px 14px',
-                    borderRadius: '20px',
-                    boxShadow: '0 2px 10px rgba(245, 158, 11, 0.3)',
-                    position: 'relative',
-                    zIndex: 2
-                  }}>
-                    {selectedGift.price.toLocaleString()} so'm
-                  </div>
-                </div>
-
-                {/* Xabar yozish joyi */}
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginBottom: '6px' }}>
-                    Jonli efirda o'qib beriladigan xabar:
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Efirda ovoz bilan o'qib beriladigan xabaringizni yozing..."
-                    value={donationMessage}
-                    onChange={e => setDonationMessage(e.target.value)}
-                    maxLength={200}
-                    style={{
-                      width: '100%',
-                      background: 'rgba(255,255,255,0.08)',
-                      border: '1px solid rgba(255,255,255,0.2)',
+                {selectedGift.type === 'VIDEO' ? (
+                  /* 🎬 OVOZLI VIDEO / GIF TANLANGANDA: XABAR YOZISH JOYI BO'LMAYDI */
+                  <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                    <div style={{
+                      position: 'relative',
+                      borderRadius: '16px',
+                      overflow: 'hidden',
+                      background: '#000',
+                      border: '2px solid rgba(168, 85, 247, 0.7)',
+                      boxShadow: '0 8px 24px rgba(168, 85, 247, 0.35)',
+                      marginBottom: '12px'
+                    }}>
+                      <video
+                        src={selectedGift.mediaUrl || ''}
+                        controls
+                        autoPlay
+                        loop
+                        playsInline
+                        style={{ width: '100%', maxHeight: '200px', display: 'block', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <h4 style={{ fontSize: '18px', fontWeight: '900', color: '#fff', margin: '6px 0 4px 0' }}>
+                      {selectedGift.name}
+                    </h4>
+                    <div style={{
+                      display: 'inline-block',
+                      background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(99, 102, 241, 0.3))',
+                      border: '1.5px solid rgba(192, 132, 252, 0.8)',
+                      color: '#e9d5ff',
+                      fontWeight: '900',
+                      fontSize: '14px',
+                      padding: '3px 16px',
+                      borderRadius: '20px',
+                      boxShadow: '0 2px 10px rgba(168, 85, 247, 0.3)',
+                      marginBottom: '12px'
+                    }}>
+                      {selectedGift.price.toLocaleString()} so'm
+                    </div>
+                    <div style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      padding: '10px 14px',
                       borderRadius: '12px',
-                      padding: '10px 12px',
-                      color: '#fff',
-                      fontSize: '13px',
-                      outline: 'none',
-                      resize: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <div style={{ textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                    {donationMessage.length}/200
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.85)',
+                      lineHeight: '1.4',
+                      textAlign: 'left'
+                    }}>
+                      🔊 <b>Ovozli video donat:</b> Ushbu video jonli efirda o'zining asl ovozi va musiqasi bilan ko'rsatiladi. Xabar yozilmaydi, faqat video yuboriladi.
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* 🎁 ODDIY EMOJI SOVG'A TANLANGANDA: XABAR YOZISH MAYDONI BILAN */
+                  <div>
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '18px 12px',
+                      background: 'radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(0,0,0,0) 70%)',
+                      borderRadius: '16px',
+                      marginBottom: '14px',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        top: '40%',
+                        left: '50%',
+                        width: '160px',
+                        height: '160px',
+                        borderRadius: '50%',
+                        background: 'radial-gradient(circle, rgba(254, 240, 138, 0.4) 0%, rgba(245, 158, 11, 0.1) 50%, rgba(0,0,0,0) 70%)',
+                        transform: 'translate(-50%, -50%)',
+                        animation: 'pulseGlow 2s infinite alternate',
+                        pointerEvents: 'none'
+                      }} />
+
+                      <div className={selectedGift.animClass || 'anim-bounce'} style={{
+                        fontSize: '72px',
+                        lineHeight: 1,
+                        animation: 'bigGiftCelebration 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                        filter: `drop-shadow(0 0 20px ${selectedGift.glowColor || 'rgba(245, 158, 11, 0.9)'})`,
+                        display: 'inline-block',
+                        position: 'relative',
+                        zIndex: 2
+                      }}>
+                        {selectedGift.icon}
+                      </div>
+                      <h4 style={{ fontSize: '18px', fontWeight: '900', color: '#fff', margin: '10px 0 3px 0', position: 'relative', zIndex: 2 }}>
+                        {selectedGift.name}
+                      </h4>
+                      <div style={{
+                        display: 'inline-block',
+                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.3))',
+                        border: '1.5px solid rgba(254, 240, 138, 0.7)',
+                        color: '#fef08a',
+                        fontWeight: '900',
+                        fontSize: '14px',
+                        padding: '3px 14px',
+                        borderRadius: '20px',
+                        boxShadow: '0 2px 10px rgba(245, 158, 11, 0.3)',
+                        position: 'relative',
+                        zIndex: 2
+                      }}>
+                        {selectedGift.price.toLocaleString()} so'm
+                      </div>
+                    </div>
+
+                    {/* Xabar yozish joyi */}
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginBottom: '6px' }}>
+                        Jonli efirda o'qib beriladigan xabar:
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="Efirda ovoz bilan o'qib beriladigan xabaringizni yozing..."
+                        value={donationMessage}
+                        onChange={e => setDonationMessage(e.target.value)}
+                        maxLength={200}
+                        style={{
+                          width: '100%',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '12px',
+                          padding: '10px 12px',
+                          color: '#fff',
+                          fontSize: '13px',
+                          outline: 'none',
+                          resize: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <div style={{ textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                        {donationMessage.length}/200
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Danat qilish tugmasi */}
                 <button
@@ -2530,12 +2830,12 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                     padding: '14px',
                     borderRadius: '14px',
                     border: 'none',
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    background: selectedGift.type === 'VIDEO' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
                     color: '#fff',
                     fontWeight: '800',
                     fontSize: '15px',
                     cursor: 'pointer',
-                    boxShadow: '0 4px 18px rgba(245, 158, 11, 0.5)',
+                    boxShadow: selectedGift.type === 'VIDEO' ? '0 4px 18px rgba(168, 85, 247, 0.5)' : '0 4px 18px rgba(245, 158, 11, 0.5)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

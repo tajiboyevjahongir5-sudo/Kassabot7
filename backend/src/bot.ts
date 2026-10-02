@@ -414,12 +414,17 @@ export async function confirmLiveDonation(donationId: number, confirmedBy: strin
 
     // Notify user via Telegram bot
     if (donation.userId) {
+      const isVideo = donation.giftType === 'VIDEO';
+      const waitNotice = isVideo
+        ? `⏳ Donatingiz 30 sekunddan keyin jonli efirda ovozli video bilan chiqadi!`
+        : `⏳ Donatingiz 30 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`;
+
       bot.telegram.sendMessage(
         donation.userId,
         `🎉 <b>Donat to'lovingiz muvaffaqiyatli qabul qilindi!</b>\n\n` +
         `🎁 Sovg'a: ${donation.giftIcon} ${donation.giftName}\n` +
         `💰 Summa: ${donation.amount.toLocaleString()} so'm\n\n` +
-        `⏳ Donatingiz 30 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`,
+        waitNotice,
         { parse_mode: 'HTML' }
       ).catch(() => {});
     }

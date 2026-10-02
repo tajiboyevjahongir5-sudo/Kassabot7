@@ -20,6 +20,14 @@ app.use(compression()); // gzip all responses — reduces bandwidth up to 70%
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Ensure upload folders exist for video and media gifts
+const uploadsDir = path.join(process.cwd(), 'uploads');
+const giftsUploadsDir = path.join(uploadsDir, 'gifts');
+if (!fs.existsSync(giftsUploadsDir)) {
+  fs.mkdirSync(giftsUploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
+
 
 
 // Health check route for Railway (must be BEFORE static files to avoid libuv thread pool exhaustion)
@@ -1231,19 +1239,41 @@ app.post('/api/live/frame', (req, res) => {
 
 // ================= LIVE DONATIONS (SOVG'ALAR VA DANAT) =================
 export const DEFAULT_DONATION_GIFTS = [
-  { giftKey: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash', animationType: 'sway', glowColor: 'rgba(244, 63, 94, 0.8)', order: 1 },
-  { giftKey: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat', animationType: 'pulse', glowColor: 'rgba(245, 158, 11, 0.8)', order: 2 },
-  { giftKey: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish', animationType: 'bounce', glowColor: 'rgba(180, 83, 9, 0.8)', order: 3 },
-  { giftKey: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish', animationType: 'fly', glowColor: 'rgba(56, 189, 248, 0.9)', order: 4 },
-  { giftKey: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom', animationType: 'spin', glowColor: 'rgba(250, 204, 21, 0.95)', order: 5 },
-  { giftKey: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat', animationType: 'shake', glowColor: 'rgba(239, 68, 68, 0.9)', order: 6 },
-  { giftKey: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a', animationType: 'spin', glowColor: 'rgba(147, 197, 253, 0.95)', order: 7 },
-  { giftKey: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat', animationType: 'pulse', glowColor: 'rgba(245, 158, 11, 1)', order: 8 }
+  { giftKey: 'rose', name: 'Atirgul', icon: '🌹', price: 5000, description: 'Chiroyli gullar bilan qo\'llab-quvvatlash', animationType: 'sway', glowColor: 'rgba(244, 63, 94, 0.8)', type: 'EMOJI', duration: 8, order: 1 },
+  { giftKey: 'coffee', name: 'Issiq Qahva', icon: '☕', price: 10000, description: 'Streamer uchun quvvat', animationType: 'pulse', glowColor: 'rgba(245, 158, 11, 0.8)', type: 'EMOJI', duration: 8, order: 2 },
+  { giftKey: 'chocolate', name: 'Shokolad', icon: '🍫', price: 20000, description: 'Shirin kayfiyat ulashish', animationType: 'bounce', glowColor: 'rgba(180, 83, 9, 0.8)', type: 'EMOJI', duration: 8, order: 3 },
+  { giftKey: 'rocket', name: 'Kosmik Raketa', icon: '🚀', price: 50000, description: 'Efirni koinotga olib chiqish', animationType: 'fly', glowColor: 'rgba(56, 189, 248, 0.9)', type: 'EMOJI', duration: 8, order: 4 },
+  { giftKey: 'crown', name: 'Qirol Toji', icon: '👑', price: 100000, description: 'Haqiqiy VIP ehtirom', animationType: 'spin', glowColor: 'rgba(250, 204, 21, 0.95)', type: 'EMOJI', duration: 8, order: 5 },
+  { giftKey: 'supercar', name: 'Sportkar', icon: '🏎️', price: 250000, description: 'Katta tezlik va quvvat', animationType: 'shake', glowColor: 'rgba(239, 68, 68, 0.9)', type: 'EMOJI', duration: 8, order: 6 },
+  { giftKey: 'diamond', name: 'Katta Olmos', icon: '💎', price: 500000, description: 'Yorqin va bebaho sovg\'a', animationType: 'spin', glowColor: 'rgba(147, 197, 253, 0.95)', type: 'EMOJI', duration: 8, order: 7 },
+  { giftKey: 'castle', name: 'Oltin Qasr', icon: '🏰', price: 1000000, description: 'Eng oliy darajadagi donat', animationType: 'pulse', glowColor: 'rgba(245, 158, 11, 1)', type: 'EMOJI', duration: 8, order: 8 },
+  // Ovozli GIF / Video sovg'alar (Admin xohlagancha o'zgartirishi va yangi qo'shishi mumkin)
+  { giftKey: 'video_cheer', name: 'Qarsaklar & Olqish', icon: '👏', price: 15000, description: 'Efir uchun qizg\'in olqishlar', animationType: 'bounce', glowColor: 'rgba(34, 197, 94, 0.9)', type: 'VIDEO', mediaUrl: 'https://assets.mixkit.co/videos/preview/mixkit-hands-clapping-in-applause-4948-large.mp4', duration: 7, order: 9 },
+  { giftKey: 'video_party', name: 'Bayram & Salut', icon: '🎉', price: 30000, description: 'Efirda ajoyib bayram shukuhi', animationType: 'pulse', glowColor: 'rgba(168, 85, 247, 0.9)', type: 'VIDEO', mediaUrl: 'https://assets.mixkit.co/videos/preview/mixkit-fireworks-illuminating-the-beach-sky-4157-large.mp4', duration: 8, order: 10 }
 ];
+
+let schemaEnsured = false;
+async function ensureGiftSchema() {
+  if (schemaEnsured) return;
+  try {
+    await (prisma as any).$executeRawUnsafe(`
+      ALTER TABLE "LiveGift" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'EMOJI';
+      ALTER TABLE "LiveGift" ADD COLUMN IF NOT EXISTS "mediaUrl" TEXT;
+      ALTER TABLE "LiveGift" ADD COLUMN IF NOT EXISTS "duration" INTEGER DEFAULT 8;
+      ALTER TABLE "LiveDonation" ADD COLUMN IF NOT EXISTS "giftType" TEXT DEFAULT 'EMOJI';
+      ALTER TABLE "LiveDonation" ADD COLUMN IF NOT EXISTS "mediaUrl" TEXT;
+    `);
+    schemaEnsured = true;
+    console.log('[DONATIONS] LiveGift & LiveDonation columns verified.');
+  } catch (err) {
+    console.warn('[DONATIONS] Note during schema verify:', err);
+  }
+}
 
 // Helper to seed gifts if empty
 async function getOrSeedGifts() {
   try {
+    await ensureGiftSchema();
     const totalCount = await (prisma as any).liveGift.count();
 
     if (totalCount === 0) {
@@ -1254,6 +1284,19 @@ async function getOrSeedGifts() {
           update: {},
           create: dg
         });
+      }
+    } else {
+      // If gifts exist but no VIDEO gifts have been seeded yet, add default video gifts
+      const videoCount = await (prisma as any).liveGift.count({ where: { type: 'VIDEO' } }).catch(() => 0);
+      if (videoCount === 0) {
+        const videoGifts = DEFAULT_DONATION_GIFTS.filter(g => g.type === 'VIDEO');
+        for (const vg of videoGifts) {
+          await (prisma as any).liveGift.upsert({
+            where: { giftKey: vg.giftKey },
+            update: {},
+            create: vg
+          }).catch(() => {});
+        }
       }
     }
 
@@ -1270,7 +1313,10 @@ async function getOrSeedGifts() {
       price: g.price,
       description: g.description,
       animationType: g.animationType || 'bounce',
-      glowColor: g.glowColor || 'rgba(245, 158, 11, 0.8)'
+      glowColor: g.glowColor || 'rgba(245, 158, 11, 0.8)',
+      type: g.type || 'EMOJI',
+      mediaUrl: g.mediaUrl || null,
+      duration: g.duration || 8
     }));
   } catch (err) {
     console.error('getOrSeedGifts error:', err);
@@ -1281,7 +1327,10 @@ async function getOrSeedGifts() {
       price: g.price,
       description: g.description,
       animationType: g.animationType,
-      glowColor: g.glowColor
+      glowColor: g.glowColor,
+      type: (g as any).type || 'EMOJI',
+      mediaUrl: (g as any).mediaUrl || null,
+      duration: (g as any).duration || 8
     }));
   }
 }
@@ -1307,12 +1356,15 @@ export async function triggerDonationDisplay(donationId: number) {
       giftId: donation.giftId,
       giftName: donation.giftName,
       giftIcon: donation.giftIcon,
+      giftType: donation.giftType || 'EMOJI',
+      mediaUrl: donation.mediaUrl || null,
       amount: donation.amount,
       message: donation.message || '',
+      duration: donation.giftType === 'VIDEO' ? 10 : 8,
       timestamp: Date.now()
     });
 
-    console.log(`[DONATION] Displayed on live stream: ${donation.userName} sent ${donation.giftName} (${donation.amount} UZS)`);
+    console.log(`[DONATION] Displayed on live stream: ${donation.userName} sent ${donation.giftName} (${donation.amount} UZS, type: ${donation.giftType || 'EMOJI'})`);
   } catch (err) {
     console.error('triggerDonationDisplay error:', err);
   }
@@ -1363,7 +1415,7 @@ app.get('/api/admin/gifts', requireAdmin, async (_req, res) => {
 // 3. Admin: Add new gift
 app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
   try {
-    const { name, icon, price, description, animationType, glowColor } = req.body;
+    const { name, icon, price, description, animationType, glowColor, type, mediaUrl, duration } = req.body;
 
     // Nom validatsiyasi
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -1380,8 +1432,20 @@ app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Sovg\'a narxi musbat son bo\'lishi kerak (0 dan katta)' });
     }
 
+    // Type va Media
+    const cleanType = (type === 'VIDEO') ? 'VIDEO' : 'EMOJI';
+    let cleanMediaUrl: string | null = null;
+    if (cleanType === 'VIDEO') {
+      if (!mediaUrl || typeof mediaUrl !== 'string' || !mediaUrl.trim()) {
+        return res.status(400).json({ error: 'Ovozli video yoki GIF havolasi (mediaUrl) kiritilishi shart' });
+      }
+      cleanMediaUrl = mediaUrl.trim();
+    }
+
+    const cleanDuration = cleanType === 'VIDEO' ? Math.min(60, Math.max(3, Number(duration) || 8)) : 8;
+
     // Ikonka/emoji validatsiyasi
-    let cleanIcon = (typeof icon === 'string' ? icon.trim() : '') || '🎁';
+    let cleanIcon = (typeof icon === 'string' ? icon.trim() : '') || (cleanType === 'VIDEO' ? '🎬' : '🎁');
     if (cleanIcon.length > 10) {
       cleanIcon = cleanIcon.slice(0, 10);
     }
@@ -1401,7 +1465,10 @@ app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
         price: Math.floor(numPrice),
         description: description ? String(description).trim() : null,
         animationType: cleanAnimation,
-        glowColor: glowColor ? String(glowColor).trim() : 'rgba(245, 158, 11, 0.8)',
+        glowColor: glowColor ? String(glowColor).trim() : (cleanType === 'VIDEO' ? 'rgba(139, 92, 246, 0.9)' : 'rgba(245, 158, 11, 0.8)'),
+        type: cleanType,
+        mediaUrl: cleanMediaUrl,
+        duration: cleanDuration,
         order: count + 1,
         isActive: true
       }
@@ -1414,7 +1481,47 @@ app.post('/api/admin/gifts', requireAdmin, async (req, res) => {
   }
 });
 
-// 4. Admin: Update gift (edit price, name, icon, animation, etc.)
+// 3.1 Admin: Upload video file for gift
+app.post('/api/admin/gifts/upload-video', requireAdmin, async (req, res) => {
+  try {
+    const { videoBase64, filename } = req.body;
+    if (!videoBase64) {
+      return res.status(400).json({ error: 'Video fayli (base64) kiritilishi shart' });
+    }
+
+    let buffer: Buffer;
+    let ext = '.mp4';
+    const matches = String(videoBase64).match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
+
+    if (matches && matches.length === 3) {
+      const mime = matches[1];
+      if (mime.includes('webm')) ext = '.webm';
+      else if (mime.includes('gif')) ext = '.gif';
+      else if (mime.includes('ogg')) ext = '.ogv';
+      else ext = '.mp4';
+      buffer = Buffer.from(matches[2], 'base64');
+    } else {
+      buffer = Buffer.from(videoBase64, 'base64');
+    }
+
+    if (buffer.length > 40 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Video hajmi 40 MB dan oshmasligi kerak' });
+    }
+
+    const cleanFilename = `gift_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${ext}`;
+    const targetPath = path.join(giftsUploadsDir, cleanFilename);
+    fs.writeFileSync(targetPath, buffer);
+
+    const mediaUrl = `/uploads/gifts/${cleanFilename}`;
+    console.log(`[GIFTS] New gift video uploaded: ${mediaUrl} (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`);
+    res.json({ success: true, url: mediaUrl });
+  } catch (err: any) {
+    console.error('Upload gift video error:', err);
+    res.status(500).json({ error: 'Video yuklashda xatolik yuz berdi', detail: err?.message });
+  }
+});
+
+// 4. Admin: Update gift (edit price, name, icon, animation, type, mediaUrl, etc.)
 app.put('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -1427,7 +1534,7 @@ app.put('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Sovg\'a topilmadi' });
     }
 
-    const { name, icon, price, description, animationType, glowColor, isActive, order } = req.body;
+    const { name, icon, price, description, animationType, glowColor, isActive, order, type, mediaUrl, duration } = req.body;
     const dataToUpdate: any = {};
 
     if (name !== undefined) {
@@ -1465,6 +1572,21 @@ app.put('/api/admin/gifts/:id', requireAdmin, async (req, res) => {
 
     if (glowColor !== undefined) {
       dataToUpdate.glowColor = String(glowColor).trim() || 'rgba(245, 158, 11, 0.8)';
+    }
+
+    if (type !== undefined) {
+      dataToUpdate.type = type === 'VIDEO' ? 'VIDEO' : 'EMOJI';
+    }
+
+    if (mediaUrl !== undefined) {
+      dataToUpdate.mediaUrl = mediaUrl ? String(mediaUrl).trim() : null;
+    }
+
+    if (duration !== undefined) {
+      const numDur = Number(duration);
+      if (!isNaN(numDur) && numDur >= 3) {
+        dataToUpdate.duration = Math.min(60, Math.floor(numDur));
+      }
     }
 
     if (isActive !== undefined) {
@@ -1603,6 +1725,7 @@ app.post('/api/live/donate/create', async (req, res) => {
       exactAmount = gift.price + Math.floor(Math.random() * 900) + 100;
     }
 
+    const isVideoGift = (gift as any).type === 'VIDEO';
     const donation = await (prisma as any).liveDonation.create({
       data: {
         streamId: activeStream?.id || null,
@@ -1611,9 +1734,11 @@ app.post('/api/live/donate/create', async (req, res) => {
         giftId: gift.id,
         giftName: gift.name,
         giftIcon: gift.icon,
+        giftType: (gift as any).type || 'EMOJI',
+        mediaUrl: (gift as any).mediaUrl || null,
         baseAmount: gift.price,
         amount: exactAmount,
-        message: (message || '').trim().slice(0, 200),
+        message: isVideoGift ? '' : (message || '').trim().slice(0, 200),
         status: 'PENDING',
         cardDetails: cardNumber ? `${cardNumber} (${cardHolder})` : 'Karta topilmadi'
       }

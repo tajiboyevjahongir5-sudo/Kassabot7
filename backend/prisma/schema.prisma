@@ -176,9 +176,11 @@ model LiveDonation {
   stream      LiveStream? @relation(fields: [streamId], references: [id])
   userId      String
   userName    String      @default("Mehmon")
-  giftId      String      // masalan 'rose', 'coffee', 'car', 'crown', 'diamond'
+  giftId      String      // masalan 'rose', 'gift_video_123'
   giftName    String
-  giftIcon    String      // emoji yoki icon
+  giftIcon    String      // emoji yoki video poster
+  giftType    String      @default("EMOJI") // EMOJI yoki VIDEO
+  mediaUrl    String?     // Ovozli video/gif fayl manzili
   amount      Int         // to'lanishi kerak bo'lgan aniq summa (masalan 25123 so'm)
   baseAmount  Int         // sovg'a asl narxi (masalan 25000)
   message     String      @default("")
@@ -210,10 +212,14 @@ model LiveGift {
   description   String?
   animationType String   @default("bounce") // bounce, float, pulse, spin, sway, shake, fly
   glowColor     String   @default("#f59e0b")
+  type          String   @default("EMOJI") // EMOJI yoki VIDEO
+  mediaUrl      String?  // Ovozli video/gif fayl manzili
+  duration      Int      @default(8)       // Efirda necha soniya ko'rsatilishi
   order         Int      @default(0)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
 
   @@index([isActive])
+  @@index([type])
 }
 

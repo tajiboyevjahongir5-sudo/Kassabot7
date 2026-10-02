@@ -65,12 +65,16 @@ export default function AdminView() {
 
   // Donation Gifts Management
   const [adminGifts, setAdminGifts] = useState<any[]>([]);
+  const [adminGiftTab, setAdminGiftTab] = useState<'EMOJI' | 'VIDEO'>('EMOJI');
   const [loadingGifts, setLoadingGifts] = useState(false);
   const [editingGift, setEditingGift] = useState<any | null>(null);
   const [newGiftName, setNewGiftName] = useState('');
   const [newGiftIcon, setNewGiftIcon] = useState('🎁');
   const [newGiftPrice, setNewGiftPrice] = useState('');
   const [newGiftAnim, setNewGiftAnim] = useState('bounce');
+  const [newGiftMediaUrl, setNewGiftMediaUrl] = useState('');
+  const [newGiftDuration, setNewGiftDuration] = useState(8);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [savingGift, setSavingGift] = useState(false);
   const [adminDonations, setAdminDonations] = useState<any[]>([]);
   const [loadingDonations, setLoadingDonations] = useState(false);
@@ -562,6 +566,39 @@ export default function AdminView() {
     }
   };
 
+  const handleUploadGiftVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 35 * 1024 * 1024) {
+      return alert("Video hajmi 35 MB dan oshmasligi kerak");
+    }
+
+    setUploadingVideo(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result as string;
+        const res = await fetch(`${API_URL}/admin/gifts/upload-video`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ videoBase64: base64Data, filename: file.name })
+        });
+        const data = await res.json();
+        if (res.ok && data.url) {
+          setNewGiftMediaUrl(data.url);
+          alert("Video muvaffaqiyatli yuklandi!");
+        } else {
+          alert(data.error || "Video yuklashda xatolik");
+        }
+        setUploadingVideo(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      alert("Faylni o'qishda xatolik yuz berdi");
+      setUploadingVideo(false);
+    }
+  };
+
   const handleAddGift = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = newGiftName.trim();
@@ -574,7 +611,11 @@ export default function AdminView() {
       return alert("Sovg'a narxi musbat son bo'lishi kerak (0 dan katta)");
     }
 
-    const cleanIcon = newGiftIcon.trim() || '🎁';
+    if (adminGiftTab === 'VIDEO' && (!newGiftMediaUrl || !newGiftMediaUrl.trim())) {
+      return alert("Ovozli video faylini yuklang yoki video URL manzilini kiriting!");
+    }
+
+    const cleanIcon = newGiftIcon.trim() || (adminGiftTab === 'VIDEO' ? '🎬' : '🎁');
     setSavingGift(true);
     try {
       const res = await fetch(`${API_URL}/admin/gifts`, {
@@ -584,16 +625,21 @@ export default function AdminView() {
           name: cleanName,
           icon: cleanIcon,
           price: Math.floor(priceNum),
-          animationType: newGiftAnim
+          animationType: newGiftAnim,
+          type: adminGiftTab,
+          mediaUrl: adminGiftTab === 'VIDEO' ? newGiftMediaUrl.trim() : null,
+          duration: adminGiftTab === 'VIDEO' ? Math.max(3, Math.min(60, Number(newGiftDuration) || 8)) : 8
         })
       });
       if (res.ok) {
         setNewGiftName('');
         setNewGiftPrice('');
-        setNewGiftIcon('🎁');
+        setNewGiftIcon(adminGiftTab === 'VIDEO' ? '🎬' : '🎁');
         setNewGiftAnim('bounce');
+        setNewGiftMediaUrl('');
+        setNewGiftDuration(8);
         fetchAdminGifts();
-        alert("Yangi sovg'a muvaffaqiyatli qo'shildi!");
+        alert(adminGiftTab === 'VIDEO' ? "Yangi ovozli video sovg'a qo'shildi!" : "Yangi sovg'a muvaffaqiyatli qo'shildi!");
       } else {
         const data = await res.json().catch(() => ({}));
         alert(data.error || "Sovg'a qo'shishda xatolik yuz berdi");
@@ -619,7 +665,7 @@ export default function AdminView() {
       return alert("Sovg'a narxi musbat son bo'lishi kerak (0 dan katta)");
     }
 
-    const cleanIcon = String(editingGift.icon || '').trim() || '🎁';
+    const cleanIcon = String(editingGift.icon || '').trim() || (editingGift.type === 'VIDEO' ? '🎬' : '🎁');
     setSavingGift(true);
     try {
       const res = await fetch(`${API_URL}/admin/gifts/${editingGift.id}`, {
@@ -629,7 +675,10 @@ export default function AdminView() {
           ...editingGift,
           name: cleanName,
           icon: cleanIcon,
-          price: Math.floor(priceNum)
+          price: Math.floor(priceNum),
+          type: editingGift.type || 'EMOJI',
+          mediaUrl: editingGift.mediaUrl || null,
+          duration: editingGift.duration ? Number(editingGift.duration) : 8
         })
       });
       if (res.ok) {
@@ -1169,16 +1218,58 @@ export default function AdminView() {
                   {loadingGifts ? 'Yuklanmoqda...' : 'Yangilash'}
                 </button>
               </div>
-              <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.4', marginBottom: '16px' }}>
-                Jonli efirda foydalanuvchilar yuboradigan sovg'alar ro'yxati va ularning narxlari. Narxini o'zgartirishingiz yoki yangi sovg'a qo'shishingiz mumkin:
+              <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.4', marginBottom: '14px' }}>
+                Jonli efirda foydalanuvchilar yuboradigan emoji sovg'alar va ovozli video/giflar boshqaruvi:
               </p>
+
+              {/* Tabs: Oddiy Sovg'alar vs Ovozli Video / GIF */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminGiftTab('EMOJI');
+                    setNewGiftIcon('🎁');
+                  }}
+                  className="neon-btn"
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    background: adminGiftTab === 'EMOJI' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(255,255,255,0.06)',
+                    borderColor: adminGiftTab === 'EMOJI' ? '#f59e0b' : 'rgba(255,255,255,0.2)',
+                    color: '#fff'
+                  }}
+                >
+                  🎁 Oddiy Emoji Sovg'alar ({adminGifts.filter((g: any) => g.type !== 'VIDEO').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminGiftTab('VIDEO');
+                    setNewGiftIcon('🎬');
+                  }}
+                  className="neon-btn"
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    background: adminGiftTab === 'VIDEO' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'rgba(255,255,255,0.06)',
+                    borderColor: adminGiftTab === 'VIDEO' ? '#a855f7' : 'rgba(255,255,255,0.2)',
+                    color: '#fff'
+                  }}
+                >
+                  🎬 Ovozli GIF / Videolar ({adminGifts.filter((g: any) => g.type === 'VIDEO').length})
+                </button>
+              </div>
 
               {/* Editing Gift Modal / Card */}
               {editingGift && (
-                <form onSubmit={handleUpdateGift} className="cyber-card" style={{ padding: '16px', marginBottom: '18px', border: '1.5px solid #f59e0b', background: 'rgba(245, 158, 11, 0.08)' }}>
+                <form onSubmit={handleUpdateGift} className="cyber-card" style={{ padding: '16px', marginBottom: '18px', border: editingGift.type === 'VIDEO' ? '1.5px solid #a855f7' : '1.5px solid #f59e0b', background: editingGift.type === 'VIDEO' ? 'rgba(168, 85, 247, 0.08)' : 'rgba(245, 158, 11, 0.08)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#fef08a', margin: 0 }}>
-                      ✏️ Sovg'ani tahrirlash: {editingGift.name}
+                    <h4 style={{ fontSize: '13px', fontWeight: '800', color: editingGift.type === 'VIDEO' ? '#c084fc' : '#fef08a', margin: 0 }}>
+                      ✏️ Sovg'ani tahrirlash: {editingGift.name} ({editingGift.type === 'VIDEO' ? '🎬 Video' : '🎁 Emoji'})
                     </h4>
                     <button
                       type="button"
@@ -1189,18 +1280,20 @@ export default function AdminView() {
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
-                      <input
-                        className="cyber-input"
-                        style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
-                        value={editingGift.icon || ''}
-                        maxLength={10}
-                        onChange={e => setEditingGift({ ...editingGift, icon: e.target.value })}
-                        required
-                      />
-                    </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: editingGift.type === 'VIDEO' ? '1fr 1fr' : '80px 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                    {editingGift.type !== 'VIDEO' && (
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                        <input
+                          className="cyber-input"
+                          style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
+                          value={editingGift.icon || ''}
+                          maxLength={10}
+                          onChange={e => setEditingGift({ ...editingGift, icon: e.target.value })}
+                          required
+                        />
+                      </div>
+                    )}
                     <div>
                       <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Nomi</label>
                       <input
@@ -1227,23 +1320,62 @@ export default function AdminView() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
-                      <select
+                  {editingGift.type === 'VIDEO' && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Video / GIF URL havolasi</label>
+                      <input
                         className="cyber-input"
-                        style={{ width: '100%', background: '#131b2e', color: '#fff' }}
-                        value={editingGift.animationType || 'bounce'}
-                        onChange={e => setEditingGift({ ...editingGift, animationType: e.target.value })}
-                      >
-                        <option value="bounce">Sakrash (Bounce)</option>
-                        <option value="sway">Chayqalish (Sway)</option>
-                        <option value="fly">Uchish (Fly)</option>
-                        <option value="spin">Aylanish (Spin)</option>
-                        <option value="pulse">Pulsatsiya (Pulse)</option>
-                        <option value="shake">Titrash (Shake)</option>
-                      </select>
+                        style={{ width: '100%' }}
+                        value={editingGift.mediaUrl || ''}
+                        onChange={e => setEditingGift({ ...editingGift, mediaUrl: e.target.value })}
+                        placeholder="https://... yoki /uploads/gifts/..."
+                        required
+                      />
+                      {editingGift.mediaUrl && (
+                        <div style={{ marginTop: '8px', maxHeight: '140px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
+                          <video
+                            src={editingGift.mediaUrl}
+                            controls
+                            playsInline
+                            style={{ width: '100%', maxHeight: '140px', objectFit: 'contain' }}
+                          />
+                        </div>
+                      )}
                     </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                    {editingGift.type !== 'VIDEO' ? (
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
+                        <select
+                          className="cyber-input"
+                          style={{ width: '100%', background: '#131b2e', color: '#fff' }}
+                          value={editingGift.animationType || 'bounce'}
+                          onChange={e => setEditingGift({ ...editingGift, animationType: e.target.value })}
+                        >
+                          <option value="bounce">Sakrash (Bounce)</option>
+                          <option value="sway">Chayqalish (Sway)</option>
+                          <option value="fly">Uchish (Fly)</option>
+                          <option value="spin">Aylanish (Spin)</option>
+                          <option value="pulse">Pulsatsiya (Pulse)</option>
+                          <option value="shake">Titrash (Shake)</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Efirda ko'rsatish davomiyligi (sekund)</label>
+                        <input
+                          type="number"
+                          min="3"
+                          max="60"
+                          className="cyber-input"
+                          style={{ width: '100%' }}
+                          value={editingGift.duration || 8}
+                          onChange={e => setEditingGift({ ...editingGift, duration: Number(e.target.value) })}
+                        />
+                      </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '18px' }}>
                       <input
                         type="checkbox"
@@ -1262,7 +1394,7 @@ export default function AdminView() {
                       type="submit"
                       disabled={savingGift}
                       className="neon-btn"
-                      style={{ flex: 1, padding: '9px', background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+                      style={{ flex: 1, padding: '9px', background: editingGift.type === 'VIDEO' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'linear-gradient(135deg, #f59e0b, #d97706)' }}
                     >
                       {savingGift ? 'Saqlanmoqda...' : '💾 Saqlash'}
                     </button>
@@ -1280,7 +1412,7 @@ export default function AdminView() {
 
               {/* Gifts List Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', marginBottom: '18px' }}>
-                {adminGifts.map((gift: any) => (
+                {adminGifts.filter((g: any) => (adminGiftTab === 'VIDEO' ? g.type === 'VIDEO' : g.type !== 'VIDEO')).map((gift: any) => (
                   <div
                     key={gift.id}
                     className="cyber-card"
@@ -1289,33 +1421,66 @@ export default function AdminView() {
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
-                      border: gift.isActive === false ? '1px dashed rgba(255,255,255,0.2)' : '1px solid rgba(245, 158, 11, 0.3)',
+                      border: gift.isActive === false ? '1px dashed rgba(255,255,255,0.2)' : (gift.type === 'VIDEO' ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(245, 158, 11, 0.3)'),
                       background: gift.isActive === false ? 'rgba(0,0,0,0.3)' : 'rgba(20,24,38,0.7)',
                       opacity: gift.isActive === false ? 0.6 : 1
                     }}
                   >
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '32px', lineHeight: 1 }}>{gift.icon}</span>
-                        <span style={{
-                          fontSize: '10px',
-                          padding: '2px 6px',
-                          borderRadius: '8px',
-                          fontWeight: '700',
-                          background: gift.isActive !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                          color: gift.isActive !== false ? '#4ade80' : '#f87171'
-                        }}>
-                          {gift.isActive !== false ? 'Faol' : 'Nofaol'}
-                        </span>
-                      </div>
+                      {gift.type === 'VIDEO' ? (
+                        <div style={{ position: 'relative', width: '100%', height: '110px', borderRadius: '8px', overflow: 'hidden', background: '#000', marginBottom: '8px' }}>
+                          {gift.mediaUrl ? (
+                            <video
+                              src={gift.mediaUrl}
+                              controls
+                              playsInline
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '32px' }}>🎬</div>
+                          )}
+                          <span style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            fontSize: '9.5px',
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            fontWeight: '700',
+                            background: gift.isActive !== false ? 'rgba(34, 197, 94, 0.9)' : 'rgba(239, 68, 68, 0.9)',
+                            color: '#fff'
+                          }}>
+                            {gift.isActive !== false ? 'Faol' : 'Nofaol'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '32px', lineHeight: 1 }}>{gift.icon}</span>
+                          <span style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '8px',
+                            fontWeight: '700',
+                            background: gift.isActive !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                            color: gift.isActive !== false ? '#4ade80' : '#f87171'
+                          }}>
+                            {gift.isActive !== false ? 'Faol' : 'Nofaol'}
+                          </span>
+                        </div>
+                      )}
+
                       <div style={{ fontWeight: '800', fontSize: '13px', color: '#fff', marginBottom: '2px' }}>
                         {gift.name}
                       </div>
-                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#fef08a', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: gift.type === 'VIDEO' ? '#c084fc' : '#fef08a', marginBottom: '4px' }}>
                         {Number(gift.price).toLocaleString()} so'm
                       </div>
                       <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.5)' }}>
-                        Animatsiya: <span style={{ color: '#38bdf8' }}>{gift.animationType || 'bounce'}</span>
+                        {gift.type === 'VIDEO' ? (
+                          <>Davomiyligi: <span style={{ color: '#a7f3d0' }}>{gift.duration || 8} soniya</span></>
+                        ) : (
+                          <>Animatsiya: <span style={{ color: '#38bdf8' }}>{gift.animationType || 'bounce'}</span></>
+                        )}
                       </div>
                     </div>
 
@@ -1359,29 +1524,32 @@ export default function AdminView() {
               </div>
 
               {/* Add New Gift Form */}
-              <form onSubmit={handleAddGift} className="cyber-card" style={{ padding: '16px' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#fef08a', marginBottom: '12px', margin: 0 }}>
-                  ➕ Yangi Sovg'a qo'shish
+              <form onSubmit={handleAddGift} className="cyber-card" style={{ padding: '16px', border: adminGiftTab === 'VIDEO' ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(245, 158, 11, 0.3)' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: adminGiftTab === 'VIDEO' ? '#c084fc' : '#fef08a', marginBottom: '12px', margin: 0 }}>
+                  ➕ {adminGiftTab === 'VIDEO' ? 'Yangi Ovozli Video / GIF Sovg\'a qo\'shish' : 'Yangi Oddiy Sovg\'a qo\'shish'}
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
-                    <input
-                      className="cyber-input"
-                      style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
-                      value={newGiftIcon}
-                      maxLength={10}
-                      onChange={e => setNewGiftIcon(e.target.value)}
-                      placeholder="🎁"
-                      required
-                    />
-                  </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: adminGiftTab === 'VIDEO' ? '1fr 1fr' : '70px 1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                  {adminGiftTab !== 'VIDEO' && (
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                      <input
+                        className="cyber-input"
+                        style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
+                        value={newGiftIcon}
+                        maxLength={10}
+                        onChange={e => setNewGiftIcon(e.target.value)}
+                        placeholder="🎁"
+                        required
+                      />
+                    </div>
+                  )}
                   <div>
                     <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Sovg'a nomi *</label>
                     <input
                       className="cyber-input"
                       style={{ width: '100%' }}
-                      placeholder="Masalan: Oltin Kubok"
+                      placeholder={adminGiftTab === 'VIDEO' ? "Masalan: Qarsaklar & Tabrik" : "Masalan: Oltin Kubok"}
                       value={newGiftName}
                       maxLength={50}
                       onChange={e => setNewGiftName(e.target.value)}
@@ -1404,38 +1572,104 @@ export default function AdminView() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
-                    <select
-                      className="cyber-input"
-                      style={{ width: '100%', background: '#131b2e', color: '#fff' }}
-                      value={newGiftAnim}
-                      onChange={e => setNewGiftAnim(e.target.value)}
-                    >
-                      <option value="bounce">Sakrash (Bounce)</option>
-                      <option value="sway">Chayqalish (Sway)</option>
-                      <option value="fly">Uchish (Fly)</option>
-                      <option value="spin">Aylanish (Spin)</option>
-                      <option value="pulse">Pulsatsiya (Pulse)</option>
-                      <option value="shake">Titrash (Shake)</option>
-                    </select>
+                {adminGiftTab === 'VIDEO' ? (
+                  /* Ovozli Video qo'shish qismlari */
+                  <div style={{ marginTop: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '10px', marginBottom: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
+                          Video / GIF URL havolasi (yoki pastdan fayl tanlang) *
+                        </label>
+                        <input
+                          className="cyber-input"
+                          style={{ width: '100%' }}
+                          placeholder="https://...mp4 yoki webm yoki yuklang"
+                          value={newGiftMediaUrl}
+                          onChange={e => setNewGiftMediaUrl(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Davomiyligi (sek)</label>
+                        <input
+                          type="number"
+                          min="3"
+                          max="60"
+                          className="cyber-input"
+                          style={{ width: '100%' }}
+                          value={newGiftDuration}
+                          onChange={e => setNewGiftDuration(Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Fayldan yuklash tugmasi */}
+                    <div style={{ background: 'rgba(255,255,255,0.04)', padding: '10px', borderRadius: '10px', border: '1px dashed rgba(168, 85, 247, 0.4)', marginBottom: '10px' }}>
+                      <label style={{ fontSize: '11.5px', color: '#c084fc', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                        📁 Qurilmadan video fayl yuklash (MP4, WebM, GIF, max 35MB):
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,video/ogg,image/gif"
+                          onChange={handleUploadGiftVideo}
+                          disabled={uploadingVideo}
+                          style={{ display: 'none' }}
+                        />
+                      </label>
+                      {uploadingVideo && (
+                        <div style={{ fontSize: '11px', color: '#fef08a', marginTop: '6px' }}>
+                          ⏳ Video yuklanmoqda va serverga saqlanmoqda...
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Video Live Preview */}
+                    {newGiftMediaUrl && (
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ fontSize: '11px', opacity: 0.8, marginBottom: '4px' }}>📹 Video ko'rinishi va ovozi:</div>
+                        <video
+                          src={newGiftMediaUrl}
+                          controls
+                          playsInline
+                          style={{ width: '100%', maxHeight: '160px', borderRadius: '10px', background: '#000', objectFit: 'contain' }}
+                        />
+                      </div>
+                    )}
                   </div>
-                </div>
+                ) : (
+                  /* Oddiy Emoji sovg'a qo'shish qismlari */
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
+                      <select
+                        className="cyber-input"
+                        style={{ width: '100%', background: '#131b2e', color: '#fff' }}
+                        value={newGiftAnim}
+                        onChange={e => setNewGiftAnim(e.target.value)}
+                      >
+                        <option value="bounce">Sakrash (Bounce)</option>
+                        <option value="sway">Chayqalish (Sway)</option>
+                        <option value="fly">Uchish (Fly)</option>
+                        <option value="spin">Aylanish (Spin)</option>
+                        <option value="pulse">Pulsatsiya (Pulse)</option>
+                        <option value="shake">Titrash (Shake)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 <button
                   type="submit"
-                  disabled={savingGift}
+                  disabled={savingGift || uploadingVideo}
                   className="neon-btn"
                   style={{
                     marginTop: '12px',
                     width: '100%',
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    background: adminGiftTab === 'VIDEO' ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
                     padding: '10px',
                     fontWeight: '800'
                   }}
                 >
-                  {savingGift ? 'Qo\'shilmoqda...' : '➕ Yangi sovg\'ani qo\'shish'}
+                  {savingGift ? 'Qo\'shilmoqda...' : (adminGiftTab === 'VIDEO' ? '➕ Yangi ovozli videoni qo\'shish' : '➕ Yangi sovg\'ani qo\'shish')}
                 </button>
               </form>
 
