@@ -408,7 +408,7 @@ export async function confirmLiveDonation(donationId: number, confirmedBy: strin
     }
 
     const paidAt = new Date();
-    const displayAt = new Date(Date.now() + 30000);
+    const displayAt = new Date(Date.now() + 15000);
 
     await (prisma as any).liveDonation.update({
       where: { id: donation.id },
@@ -417,17 +417,17 @@ export async function confirmLiveDonation(donationId: number, confirmedBy: strin
 
     await incrementCardTransfer().catch(() => {});
 
-    // Schedule 30-second broadcast via decoupled event emitter
+    // Schedule 15-second broadcast via decoupled event emitter
     setTimeout(() => {
       donationEvents.emit('trigger_display', donation.id);
-    }, 30000);
+    }, 15000);
 
     // Notify user via Telegram bot
     if (donation.userId) {
       const isVideo = donation.giftType === 'VIDEO';
       const waitNotice = isVideo
-        ? `⏳ Donatingiz 30 sekunddan keyin jonli efirda ovozli video bilan chiqadi!`
-        : `⏳ Donatingiz 30 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`;
+        ? `⏳ Donatingiz 15 sekunddan keyin jonli efirda ovozli video bilan chiqadi!`
+        : `⏳ Donatingiz 15 sekunddan keyin jonli efirda chiqadi va ovoz bilan o'qib beriladi!`;
 
       bot.telegram.sendMessage(
         donation.userId,
@@ -692,7 +692,7 @@ bot.on(['message', 'edited_message'], async (ctx, next) => {
       if (matchedDonation && (isSenderAdmin || matchedDonation.userId === fromId)) {
         console.log(`[PRIVATE CHAT PAYMENT] Matched donation #${matchedDonation.id} (${matchedDonation.amount} UZS) via private message from ${fromId}`);
         await confirmLiveDonation(matchedDonation.id, `PRIVATE_MSG_${fromId}`);
-        await ctx.reply(`✅ <b>To'lov tasdiqlandi!</b>\n\n${matchedDonation.amount.toLocaleString()} so'mlik donatingiz 30 sekunddan keyin jonli efirda chiqadi!`, { parse_mode: 'HTML' });
+        await ctx.reply(`✅ <b>To'lov tasdiqlandi!</b>\n\n${matchedDonation.amount.toLocaleString()} so'mlik donatingiz 15 sekunddan keyin jonli efirda chiqadi!`, { parse_mode: 'HTML' });
         return;
       }
     }
@@ -834,14 +834,14 @@ bot.on('callback_query', async (ctx) => {
         const textVal = isPhoto ? cbMsg.caption : (cbMsg?.text || '');
         try {
           if (isPhoto) {
-            await ctx.editMessageCaption(textVal + '\n\n✅ DONAT TASDIQLANDI (30s da chiqadi)', { reply_markup: undefined });
+            await ctx.editMessageCaption(textVal + '\n\n✅ DONAT TASDIQLANDI (15s da chiqadi)', { reply_markup: undefined });
           } else {
-            await ctx.editMessageText(textVal + '\n\n✅ DONAT TASDIQLANDI (30s da chiqadi)', { reply_markup: undefined });
+            await ctx.editMessageText(textVal + '\n\n✅ DONAT TASDIQLANDI (15s da chiqadi)', { reply_markup: undefined });
           }
         } catch (e) {
           await ctx.editMessageReplyMarkup(undefined).catch(() => {});
         }
-        await ctx.answerCbQuery('✅ Donat tasdiqlandi! 30 soniyada efirga uzatiladi.');
+        await ctx.answerCbQuery('✅ Donat tasdiqlandi! 15 soniyada efirga uzatiladi.');
       } else {
         await ctx.answerCbQuery('⚠️ Donatni tasdiqlashda xatolik');
       }

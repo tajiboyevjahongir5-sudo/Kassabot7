@@ -104,54 +104,113 @@ function playDonationChime() {
   }
 }
 
-// Natural Human-like Speech Synthesis (Odam o'qigandek)
-function speakDonationMessage(userName: string, amount: number, text?: string) {
-  if (!('speechSynthesis' in window)) return;
+// Sonlarni sof o'zbek tilidagi so'zlarga aylantirish (masalan: 25000 -> yigirma besh ming)
+function numberToUzbekWords(num: number): string {
+  if (num <= 0) return 'nol';
+  const birliklar = ['', 'bir', 'ikki', 'uch', 'to\'rt', 'besh', 'olti', 'yetti', 'sakkiz', 'to\'qqiz'];
+  const onliklar = ['', 'o\'n', 'yigirma', 'o\'ttiz', 'qirq', 'ellik', 'oltmish', 'yetmish', 'sakson', 'to\'qson'];
+
+  function parseChunk(n: number): string {
+    let res = '';
+    const yuz = Math.floor(n / 100);
+    const on = Math.floor((n % 100) / 10);
+    const bir = n % 10;
+    if (yuz > 0) {
+      res += (yuz === 1 ? 'yuz' : birliklar[yuz] + ' yuz') + ' ';
+    }
+    if (on > 0) {
+      res += onliklar[on] + ' ';
+    }
+    if (bir > 0) {
+      res += birliklar[bir] + ' ';
+    }
+    return res.trim();
+  }
+
+  const million = Math.floor(num / 1000000);
+  const ming = Math.floor((num % 1000000) / 1000);
+  const qoldiq = num % 1000;
+
+  let result = '';
+  if (million > 0) {
+    result += parseChunk(million) + ' million ';
+  }
+  if (ming > 0) {
+    result += parseChunk(ming) + ' ming ';
+  }
+  if (qoldiq > 0) {
+    result += parseChunk(qoldiq);
+  }
+  return result.trim() || String(num);
+}
+
+// Sof o'zbekcha chiroyli ovozda donat xabarini o'qish (xabar o'qib bo'lingach onFinished chaqiriladi)
+function speakDonationMessage(userName: string, amount: number, text?: string, onFinished?: () => void) {
+  if (!('speechSynthesis' in window)) {
+    if (onFinished) setTimeout(onFinished, 4500);
+    return;
+  }
   try {
     if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
       window.speechSynthesis.cancel();
     }
 
-    const cleanText = text ? text.replace(/[^\p{L}\p{N}\s,!.?]/gu, '').trim() : '';
     const cleanUserName = (userName || 'Mehmon').trim();
-    const formattedAmount = Number(amount).toLocaleString('uz-UZ');
+    const amountInWords = numberToUzbekWords(Math.round(amount));
+    // Emojilarni tozalab, sof o'zbekcha matnni olish
+    const cleanText = text ? text.replace(/[^\p{L}\p{N}\s,!.?'‘’-]/gu, '').trim() : '';
+
     const fullText = cleanText 
-      ? `${cleanUserName} ${formattedAmount} so'm donat qildi. ${cleanText}`
-      : `${cleanUserName} ${formattedAmount} so'm donat qildi.`;
+      ? `${cleanUserName} ${amountInWords} so'm donat qildi. ${cleanText}`
+      : `${cleanUserName} ${amountInWords} so'm donat qildi.`;
 
     const utterance = new SpeechSynthesisUtterance(fullText);
 
-    // Detect Cyrillic (Russian) vs Latin
-    const isCyrillic = /[\u0400-\u04FF]/.test(fullText);
-
+    // O'zbek tili uchun eng mos ovoz:
     const voices = window.speechSynthesis.getVoices();
     let selectedVoice: SpeechSynthesisVoice | null = null;
 
-    if (isCyrillic) {
-      selectedVoice = voices.find(v => v.lang.startsWith('ru') && /natural|neural|google|yandex/i.test(v.name))
-        || voices.find(v => v.lang.startsWith('ru'))
-        || null;
-      utterance.lang = 'ru-RU';
-    } else {
-      // Latin: Uzbek Latin is phonetically closest to Turkish
-      selectedVoice = voices.find(v => v.lang.startsWith('uz'))
-        || voices.find(v => v.lang.startsWith('tr') && /natural|neural|google/i.test(v.name))
-        || voices.find(v => v.lang.startsWith('tr'))
-        || voices.find(v => v.lang.startsWith('en') && /natural|neural|google/i.test(v.name))
-        || voices.find(v => v.lang.startsWith('ru'))
-        || voices[0] || null;
-      utterance.lang = selectedVoice?.lang || (voices.some(v => v.lang.startsWith('uz')) ? 'uz-UZ' : 'tr-TR');
-    }
+    selectedVoice = voices.find(v => v.lang.toLowerCase().startsWith('uz'))
+      || voices.find(v => v.lang.toLowerCase().startsWith('tr') && /natural|neural|google|yandex/i.test(v.name))
+      || voices.find(v => v.lang.toLowerCase().startsWith('tr'))
+      || voices.find(v => v.lang.toLowerCase().startsWith('ru') && /natural|neural|google/i.test(v.name))
+      || voices.find(v => v.lang.toLowerCase().startsWith('ru'))
+      || voices[0] || null;
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+    } else {
+      utterance.lang = 'uz-UZ';
     }
 
-    utterance.rate = 0.94;
-    utterance.pitch = 1.04;
+    utterance.rate = 0.92; // Chiroyli, muloyim va ravon
+    utterance.pitch = 1.02; // Tabiiy insoniy intonatsiya
     utterance.volume = 1.0;
 
-    // Small delay to let chime play cleanly first
+    let hasEnded = false;
+    const triggerFinished = () => {
+      if (hasEnded) return;
+      hasEnded = true;
+      if (onFinished) {
+        // Xabar to'liq o'qib bo'lingandan so'ng 1 soniya kutib alertni yopish
+        setTimeout(onFinished, 1000);
+      }
+    };
+
+    utterance.onend = triggerFinished;
+    utterance.onerror = (e) => {
+      console.warn('Speech synthesis utterance error:', e);
+      triggerFinished();
+    };
+
+    // Brauzer onend bermay qolsa xavfsizlik vaqti (har bir belgi uchun ~95ms)
+    const estDurationMs = Math.max(5000, Math.ceil(fullText.length * 95));
+    const safetyTimer = setTimeout(() => {
+      triggerFinished();
+    }, estDurationMs + 2000);
+
+    // Chime qo'ng'iroq tovushidan so'ng ovoz boshlanishi
     setTimeout(() => {
       try {
         if (window.speechSynthesis.paused) {
@@ -160,10 +219,13 @@ function speakDonationMessage(userName: string, amount: number, text?: string) {
         window.speechSynthesis.speak(utterance);
       } catch (e) {
         console.warn('Speech speak error:', e);
+        clearTimeout(safetyTimer);
+        triggerFinished();
       }
     }, 450);
   } catch (err) {
     console.error('Speech synthesis error:', err);
+    if (onFinished) onFinished();
   }
 }
 
@@ -204,7 +266,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
   const [checkErrorMessage, setCheckErrorMessage] = useState<string | null>(null);
   const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
   const [copiedCard, setCopiedCard] = useState<boolean>(false);
-  const [countdownSeconds, setCountdownSeconds] = useState<number>(30);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(15);
   const [currentDonationAlert, setCurrentDonationAlert] = useState<any | null>(null);
   const [isAlertClosing, setIsAlertClosing] = useState<boolean>(false);
 
@@ -366,6 +428,26 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     }
   }, []);
 
+  // Alertni silliq yakunlash va keyingi donatga o'tish funksiyasi
+  const finishCurrentDonationAlert = () => {
+    if (alertDismissTimerRef.current) {
+      clearTimeout(alertDismissTimerRef.current);
+      alertDismissTimerRef.current = null;
+    }
+    setIsAlertClosing(true);
+
+    if (alertNextTimerRef.current) clearTimeout(alertNextTimerRef.current);
+    alertNextTimerRef.current = setTimeout(() => {
+      setCurrentDonationAlert(null);
+      setIsAlertClosing(false);
+      isProcessingDonationRef.current = false;
+      // Keyingi navbatdagi donatni boshlash uchun 300ms tabiiy pauza
+      setTimeout(() => {
+        processNextDonation();
+      }, 300);
+    }, 500);
+  };
+
   // Donation alert queue processor (guarantees no collisions, handles emoji and audio-video gifts)
   const processNextDonation = () => {
     if (isProcessingDonationRef.current) return;
@@ -377,37 +459,35 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
     isProcessingDonationRef.current = true;
     const nextDonation = donationQueueRef.current.shift();
+    if (!nextDonation) return;
+
     setIsAlertClosing(false);
     setCurrentDonationAlert(nextDonation);
 
     const isVideo = nextDonation.giftType === 'VIDEO' && !!nextDonation.mediaUrl;
-    const durationSeconds = (nextDonation.duration && nextDonation.duration >= 3) ? nextDonation.duration : (isVideo ? 10 : 8.5);
 
     // 1. Play audio chime
     playDonationChime();
 
-    // 2. Only use TTS speech synthesis for emoji donations with messages (so it doesn't talk over video audio)
-    if (!isVideo) {
-      speakDonationMessage(nextDonation.userName, nextDonation.amount, nextDonation.message);
+    if (isVideo) {
+      // 2. VIDEO SOVG'A: Video tamom bo'lguncha turadi!
+      // Agar brauzerda video onEnded hodisasi kelmasa, xavfsizlik fallback taymeri
+      const fallbackVideoSeconds = Math.max(10, Number(nextDonation.duration) || 15);
+      if (alertDismissTimerRef.current) clearTimeout(alertDismissTimerRef.current);
+      alertDismissTimerRef.current = setTimeout(() => {
+        finishCurrentDonationAlert();
+      }, (fallbackVideoSeconds + 3) * 1000);
+    } else {
+      // 3. EMOJI SOVG'A: Tagidagi xabarni ovoz bilan o'qib bo'lguncha turadi!
+      speakDonationMessage(
+        nextDonation.userName,
+        nextDonation.amount,
+        nextDonation.message,
+        () => {
+          finishCurrentDonationAlert();
+        }
+      );
     }
-
-    // 3. Start smooth closing after the alert duration
-    if (alertDismissTimerRef.current) clearTimeout(alertDismissTimerRef.current);
-    alertDismissTimerRef.current = setTimeout(() => {
-      setIsAlertClosing(true);
-
-      // Complete close at 0.5s fade out and schedule next queued donation
-      if (alertNextTimerRef.current) clearTimeout(alertNextTimerRef.current);
-      alertNextTimerRef.current = setTimeout(() => {
-        setCurrentDonationAlert(null);
-        setIsAlertClosing(false);
-        isProcessingDonationRef.current = false;
-        // Pause 300ms between alerts for natural visual pacing
-        setTimeout(() => {
-          processNextDonation();
-        }, 300);
-      }, 500);
-    }, durationSeconds * 1000);
   };
 
   const enqueueDonationAlert = (donation: any) => {
@@ -1353,7 +1433,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       }
       if (data.success) {
         setDonationStep('success');
-        const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 30;
+        const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 15;
         setCountdownSeconds(remaining);
         if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
         countdownTimerRef.current = setInterval(() => {
@@ -1390,7 +1470,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
         const data = await res.json();
         if (data.success) {
           setDonationStep('success');
-          const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 30;
+          const remaining = typeof data.displayInSeconds === 'number' ? data.displayInSeconds : 15;
           setCountdownSeconds(remaining);
           if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
           countdownTimerRef.current = setInterval(() => {
@@ -2039,6 +2119,9 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
                 autoPlay
                 playsInline
                 loop={false}
+                onEnded={() => {
+                  finishCurrentDonationAlert();
+                }}
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               />
               <div style={{

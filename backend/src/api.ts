@@ -1491,21 +1491,32 @@ app.post('/api/admin/gifts/upload-video', requireAdmin, async (req, res) => {
 
     let buffer: Buffer;
     let ext = '.mp4';
+
+    if (filename && typeof filename === 'string') {
+      const parsedExt = path.extname(filename).toLowerCase();
+      if (['.mp4', '.mov', '.webm', '.gif', '.ogg', '.ogv', '.m4v', '.mkv'].includes(parsedExt)) {
+        ext = parsedExt;
+      }
+    }
+
     const matches = String(videoBase64).match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
 
     if (matches && matches.length === 3) {
-      const mime = matches[1];
-      if (mime.includes('webm')) ext = '.webm';
-      else if (mime.includes('gif')) ext = '.gif';
-      else if (mime.includes('ogg')) ext = '.ogv';
-      else ext = '.mp4';
+      const mime = matches[1].toLowerCase();
+      if (!filename || ext === '.mp4') {
+        if (mime.includes('webm')) ext = '.webm';
+        else if (mime.includes('gif')) ext = '.gif';
+        else if (mime.includes('ogg')) ext = '.ogv';
+        else if (mime.includes('quicktime') || mime.includes('mov')) ext = '.mov';
+        else ext = '.mp4';
+      }
       buffer = Buffer.from(matches[2], 'base64');
     } else {
       buffer = Buffer.from(videoBase64, 'base64');
     }
 
-    if (buffer.length > 40 * 1024 * 1024) {
-      return res.status(400).json({ error: 'Video hajmi 40 MB dan oshmasligi kerak' });
+    if (buffer.length > 50 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Video hajmi 50 MB dan oshmasligi kerak' });
     }
 
     const cleanFilename = `gift_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${ext}`;
@@ -1513,8 +1524,8 @@ app.post('/api/admin/gifts/upload-video', requireAdmin, async (req, res) => {
     fs.writeFileSync(targetPath, buffer);
 
     const mediaUrl = `/uploads/gifts/${cleanFilename}`;
-    console.log(`[GIFTS] New gift video uploaded: ${mediaUrl} (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`);
-    res.json({ success: true, url: mediaUrl });
+    console.log(`[GIFTS] New gift video uploaded from gallery/device: ${mediaUrl} (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`);
+    res.json({ success: true, url: mediaUrl, sizeMb: (buffer.length / 1024 / 1024).toFixed(2) });
   } catch (err: any) {
     console.error('Upload gift video error:', err);
     res.status(500).json({ error: 'Video yuklashda xatolik yuz berdi', detail: err?.message });
@@ -1811,7 +1822,7 @@ app.post('/api/live/donate/check/:donationId', async (req, res) => {
         return res.json({
           success: true,
           status: 'PAID',
-          displayInSeconds: 30
+          displayInSeconds: 15
         });
       }
     }
@@ -1825,7 +1836,7 @@ app.post('/api/live/donate/check/:donationId', async (req, res) => {
         return res.json({
           success: true,
           status: 'PAID',
-          displayInSeconds: 30,
+          displayInSeconds: 15,
           isAdminBypass: true
         });
       }
@@ -1850,7 +1861,7 @@ app.post('/api/live/donate/confirm/:donationId', async (req, res) => {
     const donationId = Number(req.params.donationId);
     const ok = await confirmLiveDonation(donationId, 'MANUAL_API');
     if (ok) {
-      res.json({ success: true, displayInSeconds: 30 });
+      res.json({ success: true, displayInSeconds: 15 });
     } else {
       res.status(404).json({ error: 'Donat topilmadi yoki tasdiqlab bo\'lmadi' });
     }

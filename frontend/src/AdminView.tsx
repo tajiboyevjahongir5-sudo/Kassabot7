@@ -566,30 +566,70 @@ export default function AdminView() {
     }
   };
 
-  const handleUploadGiftVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadGiftVideo = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 35 * 1024 * 1024) {
-      return alert("Video hajmi 35 MB dan oshmasligi kerak");
+    if (file.size > 50 * 1024 * 1024) {
+      return alert("Video hajmi 50 MB dan oshmasligi kerak");
+    }
+
+    // Videoning davomiyligini (duration) video metadatasidan avtomatik aniqlash
+    try {
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      const objUrl = URL.createObjectURL(file);
+      tempVideo.src = objUrl;
+      tempVideo.onloadedmetadata = () => {
+        URL.revokeObjectURL(objUrl);
+        const realSec = Math.round(tempVideo.duration) || 8;
+        const boundedSec = Math.max(1, Math.min(180, realSec));
+        if (isEdit) {
+          setEditingGift((prev: any) => prev ? { ...prev, duration: boundedSec } : prev);
+        } else {
+          setNewGiftDuration(boundedSec);
+        }
+      };
+    } catch (metaErr) {
+      console.warn("Video metadata o'qishda xatolik:", metaErr);
     }
 
     setUploadingVideo(true);
     try {
       const reader = new FileReader();
       reader.onload = async () => {
-        const base64Data = reader.result as string;
-        const res = await fetch(`${API_URL}/admin/gifts/upload-video`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ videoBase64: base64Data, filename: file.name })
-        });
-        const data = await res.json();
-        if (res.ok && data.url) {
-          setNewGiftMediaUrl(data.url);
-          alert("Video muvaffaqiyatli yuklandi!");
-        } else {
-          alert(data.error || "Video yuklashda xatolik");
+        try {
+          const base64Data = reader.result as string;
+          const res = await fetch(`${API_URL}/admin/gifts/upload-video`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ videoBase64: base64Data, filename: file.name })
+          });
+          const data = await res.json();
+          if (res.ok && data.url) {
+            if (isEdit) {
+              setEditingGift((prev: any) => prev ? { ...prev, mediaUrl: data.url } : prev);
+            } else {
+              setNewGiftMediaUrl(data.url);
+              // Agar nom yozilmagan bo'lsa, fayl nomidan toza nom yaratish
+              if (!newGiftName) {
+                const baseName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ").trim();
+                if (baseName && baseName.length > 1) {
+                  setNewGiftName(baseName.charAt(0).toUpperCase() + baseName.slice(1));
+                }
+              }
+            }
+            alert("✅ Video gallereyadan muvaffaqiyatli yuklandi!");
+          } else {
+            alert(data.error || "Video yuklashda xatolik yuz berdi");
+          }
+        } catch (postErr: any) {
+          alert("Serverga yuklashda xatolik: " + (postErr?.message || "Noma'lum xatolik"));
+        } finally {
+          setUploadingVideo(false);
         }
+      };
+      reader.onerror = () => {
+        alert("Faylni o'qishda xatolik yuz berdi");
         setUploadingVideo(false);
       };
       reader.readAsDataURL(file);
@@ -601,18 +641,25 @@ export default function AdminView() {
 
   const handleAddGift = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = newGiftName.trim();
     const priceNum = Number(newGiftPrice);
 
-    if (!cleanName) {
-      return alert("Sovg'a nomi kiritilishi shart");
-    }
     if (!newGiftPrice || isNaN(priceNum) || priceNum <= 0) {
       return alert("Sovg'a narxi musbat son bo'lishi kerak (0 dan katta)");
     }
 
-    if (adminGiftTab === 'VIDEO' && (!newGiftMediaUrl || !newGiftMediaUrl.trim())) {
-      return alert("Ovozli video faylini yuklang yoki video URL manzilini kiriting!");
+    let cleanName = newGiftName.trim();
+    if (adminGiftTab === 'VIDEO') {
+      if (!newGiftMediaUrl || !newGiftMediaUrl.trim()) {
+        return alert("Iltimos, avval gallereyadan video tanlang!");
+      }
+      // Video bo'lsa nom yozish shart emas — avtomatik chiroyli nom beriladi
+      if (!cleanName) {
+        cleanName = `Video ${Math.floor(priceNum).toLocaleString()} so'm`;
+      }
+    } else {
+      if (!cleanName) {
+        return alert("Sovg'a nomi kiritilishi shart");
+      }
     }
 
     const cleanIcon = newGiftIcon.trim() || (adminGiftTab === 'VIDEO' ? '🎬' : '🎁');
@@ -628,7 +675,7 @@ export default function AdminView() {
           animationType: newGiftAnim,
           type: adminGiftTab,
           mediaUrl: adminGiftTab === 'VIDEO' ? newGiftMediaUrl.trim() : null,
-          duration: adminGiftTab === 'VIDEO' ? Math.max(3, Math.min(60, Number(newGiftDuration) || 8)) : 8
+          duration: adminGiftTab === 'VIDEO' ? Math.max(1, Math.min(180, Number(newGiftDuration) || 8)) : 8
         })
       });
       if (res.ok) {
@@ -1280,33 +1327,35 @@ export default function AdminView() {
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: editingGift.type === 'VIDEO' ? '1fr 1fr' : '80px 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: editingGift.type === 'VIDEO' ? '1fr' : '80px 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                     {editingGift.type !== 'VIDEO' && (
-                      <div>
-                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
-                        <input
-                          className="cyber-input"
-                          style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
-                          value={editingGift.icon || ''}
-                          maxLength={10}
-                          onChange={e => setEditingGift({ ...editingGift, icon: e.target.value })}
-                          required
-                        />
-                      </div>
+                      <>
+                        <div>
+                          <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                          <input
+                            className="cyber-input"
+                            style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
+                            value={editingGift.icon || ''}
+                            maxLength={10}
+                            onChange={e => setEditingGift({ ...editingGift, icon: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Nomi</label>
+                          <input
+                            className="cyber-input"
+                            style={{ width: '100%' }}
+                            value={editingGift.name || ''}
+                            maxLength={50}
+                            onChange={e => setEditingGift({ ...editingGift, name: e.target.value })}
+                            required
+                          />
+                        </div>
+                      </>
                     )}
                     <div>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Nomi</label>
-                      <input
-                        className="cyber-input"
-                        style={{ width: '100%' }}
-                        value={editingGift.name || ''}
-                        maxLength={50}
-                        onChange={e => setEditingGift({ ...editingGift, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm)</label>
+                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm) *</label>
                       <input
                         type="number"
                         min="1"
@@ -1322,22 +1371,57 @@ export default function AdminView() {
 
                   {editingGift.type === 'VIDEO' && (
                     <div style={{ marginBottom: '12px' }}>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Video / GIF URL havolasi</label>
-                      <input
-                        className="cyber-input"
-                        style={{ width: '100%' }}
-                        value={editingGift.mediaUrl || ''}
-                        onChange={e => setEditingGift({ ...editingGift, mediaUrl: e.target.value })}
-                        placeholder="https://... yoki /uploads/gifts/..."
-                        required
-                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11.5px', color: '#c084fc', fontWeight: '700' }}>
+                          ⏱ Davomiyligi: {editingGift.duration || 8} soniya (videoga mos)
+                        </span>
+                      </div>
+
+                      {/* Gallereyadan yangi video yuklash tugmasi */}
+                      <div
+                        style={{
+                          background: uploadingVideo ? 'rgba(168, 85, 247, 0.5)' : 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                          color: '#fff',
+                          fontWeight: '800',
+                          fontSize: '12.5px',
+                          padding: '11px',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        {uploadingVideo ? '⏳ Gallereyadan yuklanmoqda...' : '📂 Gallereyadan boshqa video tanlash'}
+                        <input
+                          type="file"
+                          accept="video/*,image/gif,video/mp4,video/quicktime,video/mov,video/webm"
+                          onChange={e => handleUploadGiftVideo(e, true)}
+                          disabled={uploadingVideo}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            opacity: 0,
+                            cursor: 'pointer',
+                            zIndex: 10
+                          }}
+                        />
+                      </div>
+
                       {editingGift.mediaUrl && (
-                        <div style={{ marginTop: '8px', maxHeight: '140px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
+                        <div style={{ marginTop: '8px', maxHeight: '150px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
                           <video
                             src={editingGift.mediaUrl}
                             controls
                             playsInline
-                            style={{ width: '100%', maxHeight: '140px', objectFit: 'contain' }}
+                            style={{ width: '100%', maxHeight: '150px', objectFit: 'contain' }}
                           />
                         </div>
                       )}
@@ -1529,130 +1613,183 @@ export default function AdminView() {
                   ➕ {adminGiftTab === 'VIDEO' ? 'Yangi Ovozli Video / GIF Sovg\'a qo\'shish' : 'Yangi Oddiy Sovg\'a qo\'shish'}
                 </h4>
 
-                <div style={{ display: 'grid', gridTemplateColumns: adminGiftTab === 'VIDEO' ? '1fr 1fr' : '70px 1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                  {adminGiftTab !== 'VIDEO' && (
-                    <div>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                {adminGiftTab === 'VIDEO' ? (
+                  /* Ovozli Video / GIF sovg'a qo'shish (Faqat narx va Gallereyadan video yuklash) */
+                  <div style={{ marginTop: '10px' }}>
+                    {/* Narxi (so'm) */}
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: '700', color: '#fef08a', display: 'block', marginBottom: '6px' }}>
+                        Sovg'a narxi (so'm) *
+                      </label>
                       <input
+                        type="number"
+                        min="100"
+                        step="100"
                         className="cyber-input"
-                        style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
-                        value={newGiftIcon}
-                        maxLength={10}
-                        onChange={e => setNewGiftIcon(e.target.value)}
-                        placeholder="🎁"
+                        style={{ width: '100%', fontSize: '16px', fontWeight: '800', color: '#fef08a', padding: '12px 14px', borderColor: 'rgba(254, 240, 138, 0.5)' }}
+                        placeholder="Masalan: 20000"
+                        value={newGiftPrice}
+                        onChange={e => setNewGiftPrice(e.target.value)}
                         required
                       />
                     </div>
-                  )}
-                  <div>
-                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Sovg'a nomi *</label>
-                    <input
-                      className="cyber-input"
-                      style={{ width: '100%' }}
-                      placeholder={adminGiftTab === 'VIDEO' ? "Masalan: Qarsaklar & Tabrik" : "Masalan: Oltin Kubok"}
-                      value={newGiftName}
-                      maxLength={50}
-                      onChange={e => setNewGiftName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm) *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="100"
-                      className="cyber-input"
-                      style={{ width: '100%' }}
-                      placeholder="Masalan: 75000"
-                      value={newGiftPrice}
-                      onChange={e => setNewGiftPrice(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
 
-                {adminGiftTab === 'VIDEO' ? (
-                  /* Ovozli Video qo'shish qismlari */
-                  <div style={{ marginTop: '12px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '10px', marginBottom: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
-                          Video / GIF URL havolasi (yoki pastdan fayl tanlang) *
-                        </label>
-                        <input
-                          className="cyber-input"
-                          style={{ width: '100%' }}
-                          placeholder="https://...mp4 yoki webm yoki yuklang"
-                          value={newGiftMediaUrl}
-                          onChange={e => setNewGiftMediaUrl(e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Davomiyligi (sek)</label>
-                        <input
-                          type="number"
-                          min="3"
-                          max="60"
-                          className="cyber-input"
-                          style={{ width: '100%' }}
-                          value={newGiftDuration}
-                          onChange={e => setNewGiftDuration(Number(e.target.value))}
-                        />
-                      </div>
-                    </div>
+                    {/* Gallereyadan video yuklash bo'limi */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(236, 72, 153, 0.15) 100%)',
+                      border: '2px dashed #a855f7',
+                      borderRadius: '14px',
+                      padding: '18px 14px',
+                      marginBottom: '14px',
+                      textAlign: 'center',
+                      position: 'relative'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ fontSize: '36px' }}>📱🎬</div>
+                        <div style={{ fontWeight: '800', fontSize: '15px', color: '#fff' }}>
+                          Video gallereyadan yuklash
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.4, maxWidth: '320px' }}>
+                          Telefoningiz gallereyasidagi istalgan ovozli videoni tanlang. Davomiyligi avtomatik hisoblanadi.
+                        </div>
 
-                    {/* Fayldan yuklash tugmasi */}
-                    <div style={{ background: 'rgba(255,255,255,0.04)', padding: '10px', borderRadius: '10px', border: '1px dashed rgba(168, 85, 247, 0.4)', marginBottom: '10px' }}>
-                      <label style={{ fontSize: '11.5px', color: '#c084fc', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        📁 Qurilmadan video fayl yuklash (MP4, WebM, GIF, max 35MB):
-                        <input
-                          type="file"
-                          accept="video/mp4,video/webm,video/ogg,image/gif"
-                          onChange={handleUploadGiftVideo}
-                          disabled={uploadingVideo}
-                          style={{ display: 'none' }}
-                        />
-                      </label>
+                        {/* Katta bosiladigan tugma */}
+                        <div
+                          style={{
+                            marginTop: '8px',
+                            background: uploadingVideo ? 'rgba(168, 85, 247, 0.5)' : 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                            color: '#fff',
+                            fontWeight: '800',
+                            fontSize: '13.5px',
+                            padding: '13px 22px',
+                            borderRadius: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            boxShadow: '0 4px 18px rgba(168, 85, 247, 0.45)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            width: '100%',
+                            maxWidth: '340px',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {uploadingVideo ? '⏳ Gallereyadan yuklanmoqda...' : '📂 Gallereyadan video tanlash'}
+
+                          {/* To'liq qoplovchi ko'rinmas file input - iOS va Androidda to'g'ridan-to'g'ri gallereyani ochadi */}
+                          <input
+                            type="file"
+                            accept="video/*,image/gif,video/mp4,video/quicktime,video/mov,video/webm"
+                            onChange={e => handleUploadGiftVideo(e, false)}
+                            disabled={uploadingVideo}
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              opacity: 0,
+                              cursor: 'pointer',
+                              zIndex: 10
+                            }}
+                          />
+                        </div>
+                      </div>
+
                       {uploadingVideo && (
-                        <div style={{ fontSize: '11px', color: '#fef08a', marginTop: '6px' }}>
-                          ⏳ Video yuklanmoqda va serverga saqlanmoqda...
+                        <div style={{ fontSize: '12.5px', color: '#fef08a', marginTop: '12px', fontWeight: '700' }}>
+                          ⏳ Video yuklanmoqda va serverga saqlanmoqda... Iltimos kuting!
+                        </div>
+                      )}
+
+                      {/* Video tanlangandan so'ng avtomatik davomiylik va status */}
+                      {newGiftMediaUrl && !uploadingVideo && (
+                        <div style={{ marginTop: '12px', padding: '10px 14px', background: 'rgba(34, 197, 94, 0.18)', border: '1px solid rgba(34, 197, 94, 0.5)', borderRadius: '10px', fontSize: '12px', color: '#86efac', display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800' }}>
+                            <span>✅ Video gallereyadan yuklandi!</span>
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#bbf7d0' }}>
+                            ⏱ <b>Davomiyligi:</b> {newGiftDuration} soniya (videoga mos avtomatik belgilandi)
+                          </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Video Live Preview */}
+                    {/* Video Prevyu va ovoz tekshirish */}
                     {newGiftMediaUrl && (
-                      <div style={{ marginBottom: '10px' }}>
-                        <div style={{ fontSize: '11px', opacity: 0.8, marginBottom: '4px' }}>📹 Video ko'rinishi va ovozi:</div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', opacity: '0.8', marginBottom: '4px' }}>📹 Yuklangan videoni tekshirib ko'ring (ovozli):</div>
                         <video
                           src={newGiftMediaUrl}
                           controls
                           playsInline
-                          style={{ width: '100%', maxHeight: '160px', borderRadius: '10px', background: '#000', objectFit: 'contain' }}
+                          style={{ width: '100%', maxHeight: '180px', borderRadius: '10px', background: '#000', objectFit: 'contain' }}
                         />
                       </div>
                     )}
                   </div>
                 ) : (
                   /* Oddiy Emoji sovg'a qo'shish qismlari */
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
-                      <select
-                        className="cyber-input"
-                        style={{ width: '100%', background: '#131b2e', color: '#fff' }}
-                        value={newGiftAnim}
-                        onChange={e => setNewGiftAnim(e.target.value)}
-                      >
-                        <option value="bounce">Sakrash (Bounce)</option>
-                        <option value="sway">Chayqalish (Sway)</option>
-                        <option value="fly">Uchish (Fly)</option>
-                        <option value="spin">Aylanish (Spin)</option>
-                        <option value="pulse">Pulsatsiya (Pulse)</option>
-                        <option value="shake">Titrash (Shake)</option>
-                      </select>
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Ikonka</label>
+                        <input
+                          className="cyber-input"
+                          style={{ width: '100%', textAlign: 'center', fontSize: '18px' }}
+                          value={newGiftIcon}
+                          maxLength={10}
+                          onChange={e => setNewGiftIcon(e.target.value)}
+                          placeholder="🎁"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Sovg'a nomi *</label>
+                        <input
+                          className="cyber-input"
+                          style={{ width: '100%' }}
+                          placeholder="Masalan: Oltin Kubok"
+                          value={newGiftName}
+                          maxLength={50}
+                          onChange={e => setNewGiftName(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Narxi (so'm) *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="100"
+                          className="cyber-input"
+                          style={{ width: '100%' }}
+                          placeholder="Masalan: 75000"
+                          value={newGiftPrice}
+                          onChange={e => setNewGiftPrice(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Animatsiya turi</label>
+                        <select
+                          className="cyber-input"
+                          style={{ width: '100%', background: '#131b2e', color: '#fff' }}
+                          value={newGiftAnim}
+                          onChange={e => setNewGiftAnim(e.target.value)}
+                        >
+                          <option value="bounce">Sakrash (Bounce)</option>
+                          <option value="sway">Chayqalish (Sway)</option>
+                          <option value="fly">Uchish (Fly)</option>
+                          <option value="spin">Aylanish (Spin)</option>
+                          <option value="pulse">Pulsatsiya (Pulse)</option>
+                          <option value="shake">Titrash (Shake)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )}
