@@ -360,12 +360,72 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     if ('speechSynthesis' in window) {
       try { window.speechSynthesis.cancel(); } catch {}
     }
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg?.enableVerticalSwipes) {
-      try { tg.enableVerticalSwipes(); } catch {}
-    }
     onBack();
   };
+
+  // Refs to always have fresh values in exit handlers
+  const isBroadcastingRef = useRef(isBroadcasting);
+  isBroadcastingRef.current = isBroadcasting;
+  const liveStreamRef = useRef(liveStream);
+  liveStreamRef.current = liveStream;
+
+  // Streamer botdan yoki ilovadan efirni o'chirmasdan chiqib ketsa darhol efirni avtomatik o'chirish
+  useEffect(() => {
+    const autoTerminateBroadcast = () => {
+      if (isBroadcastingRef.current) {
+        const streamId = liveStreamRef.current?.id;
+        const payload = JSON.stringify({ streamId, streamerId: userId });
+
+        if (navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon(`${API_URL}/live/end`, blob);
+        } else {
+          fetch(`${API_URL}/live/end`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          }).catch(() => {});
+        }
+        stopMediaStream();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      // Streamer mini ilovani minimallashtirganda yoki boshqa chatga o'tganda
+      if (document.visibilityState === 'hidden' && isBroadcastingRef.current) {
+        autoTerminateBroadcast();
+      }
+    };
+
+    window.addEventListener('pagehide', autoTerminateBroadcast);
+    window.addEventListener('beforeunload', autoTerminateBroadcast);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', autoTerminateBroadcast);
+      window.removeEventListener('beforeunload', autoTerminateBroadcast);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (isBroadcastingRef.current) {
+        autoTerminateBroadcast();
+      }
+    };
+  }, [userId]);
+
+  // Efir vaqtida har 3 soniyada serverga tiriklik signali (heartbeat) yuborish
+  useEffect(() => {
+    if (!isBroadcasting) return;
+
+    const heartbeatInterval = setInterval(() => {
+      fetch(`${API_URL}/live/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamerId: userId, streamId: liveStream?.id })
+      }).catch(() => {});
+    }, 3000);
+
+    return () => clearInterval(heartbeatInterval);
+  }, [isBroadcasting, userId, liveStream?.id]);
 
   // Viewport tracking & Telegram WebApp expansion (fixes keyboard pushing input offscreen & 100vh bugs)
   useEffect(() => {
@@ -390,7 +450,14 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       try {
         tg.ready?.();
         tg.expand?.();
+        if (typeof tg.requestFullscreen === 'function') {
+          tg.requestFullscreen();
+        }
+        // Pastga surilganda Mini App yopilib ketishini qat'iy taqiqlash
         tg.disableVerticalSwipes?.();
+        if (typeof tg.enableClosingConfirmation === 'function') {
+          tg.enableClosingConfirmation();
+        }
         if (tg.onEvent) {
           tg.onEvent('viewportChanged', handleViewportChange);
         }
@@ -2379,7 +2446,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           <div ref={commentsEndRef} />
         </div>
 
-        {/* Comment Input Form (Stretches 100% across the bottom) */}
+        {/* Comment Input Form (Shaffof Glassmorphism) */}
         <form 
           onSubmit={handleSendComment} 
           style={{ width: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}
@@ -2392,15 +2459,16 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             onChange={e => setNewComment(e.target.value)}
             style={{
               width: '100%',
-              background: 'rgba(255, 255, 255, 0.18)',
-              backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
+              background: 'rgba(255, 255, 255, 0.08)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
               borderRadius: '24px',
-              padding: '12px 48px 12px 16px',
+              padding: '11px 46px 11px 18px',
               color: '#fff',
-              fontSize: '16px',
+              fontSize: '15px',
               outline: 'none',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+              boxShadow: 'none',
               boxSizing: 'border-box'
             }}
           />
@@ -2410,10 +2478,10 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             style={{
               position: 'absolute',
               right: '6px',
-              width: '36px',
-              height: '36px',
+              width: '34px',
+              height: '34px',
               borderRadius: '50%',
-              background: newComment.trim() ? '#38bdf8' : 'rgba(255,255,255,0.15)',
+              background: newComment.trim() ? '#38bdf8' : 'rgba(255,255,255,0.12)',
               border: 'none',
               color: '#fff',
               display: 'flex',
@@ -2425,7 +2493,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
             }}
             aria-label="Yuborish"
           >
-            <Send size={16} />
+            <Send size={15} />
           </button>
         </form>
       </div>

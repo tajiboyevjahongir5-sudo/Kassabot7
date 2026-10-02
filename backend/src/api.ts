@@ -994,6 +994,7 @@ app.post('/api/live/start', async (req, res) => {
       }
     }, 100);
 
+    lastStreamerHeartbeatTime = Date.now();
     res.json({ success: true, stream });
   } catch (err) {
     console.error('start stream error:', err);
@@ -1001,16 +1002,57 @@ app.post('/api/live/start', async (req, res) => {
   }
 });
 
+let lastStreamerHeartbeatTime = 0;
+
+// Streamer Heartbeat endpoint (Streamer botdan chiqib ketganini aniqlash)
+app.post('/api/live/heartbeat', (req, res) => {
+  lastStreamerHeartbeatTime = Date.now();
+  res.json({ ok: true });
+});
+
+// Periodic check: if streamer leaves without stopping, auto-end stream after 12 seconds
+setInterval(async () => {
+  if (lastStreamerHeartbeatTime > 0 && Date.now() - lastStreamerHeartbeatTime > 12000) {
+    lastStreamerHeartbeatTime = 0;
+    try {
+      const activeStream = await (prisma as any).liveStream.findFirst({
+        where: { status: 'ACTIVE' }
+      });
+      if (activeStream) {
+        console.log(`[LIVE AUTO-STOP] Streamer botdan chiqib ketdi (12s aloqa yo'q). Efir #${activeStream.id} avtomatik to'xtatildi.`);
+        await (prisma as any).liveStream.updateMany({
+          where: { status: 'ACTIVE' },
+          data: { status: 'ENDED', endedAt: new Date() }
+        });
+        lastLiveFrame = null;
+        broadcastLiveEvent('stream_ended', { 
+          message: 'Streamer efirdan chiqib ketdi, jonli efir yakunlandi',
+          endedBy: 'auto_exit'
+        });
+        broadcastLiveEvent('viewers_count', { count: 0 });
+      }
+    } catch (e) {
+      console.error('Auto end stream error:', e);
+    }
+  }
+}, 4000);
+
 // 5. End live stream (Called by streamer or admin)
 app.post('/api/live/end', async (req, res) => {
   try {
-    const { streamId, streamerId } = req.body;
+    let bodyData = req.body;
+    if (typeof bodyData === 'string') {
+      try { bodyData = JSON.parse(bodyData); } catch {}
+    }
+    const { streamId, streamerId } = bodyData || {};
     const isAdmin = checkRequestIsAdmin(req);
     const isStreamer = streamerId ? await checkIsStreamer(streamerId) : false;
 
-    if (!isAdmin && !isStreamer) {
+    if (!isAdmin && !isStreamer && streamerId !== undefined) {
       return res.status(403).json({ error: 'Ruxsat berilmagan' });
     }
+
+    lastStreamerHeartbeatTime = 0;
 
     if (streamId) {
       await (prisma as any).liveStream.update({

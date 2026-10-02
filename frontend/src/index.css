@@ -20,6 +20,12 @@
   -webkit-font-smoothing: antialiased;
 }
 
+html, body {
+  overscroll-behavior: none !important;
+  overscroll-behavior-y: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
 body {
   background-color: var(--bg-color);
   color: var(--text-main);
