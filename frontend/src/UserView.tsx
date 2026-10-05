@@ -230,7 +230,7 @@ function UserView() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - var(--app-safe-top, 92px))' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - var(--app-safe-top, 110px))' }}>
         <div className="spinner"></div>
       </div>
     );
@@ -243,7 +243,7 @@ function UserView() {
         <div className="aurora-bg"></div>
         <div style={{ 
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          minHeight: 'calc(100vh - var(--app-safe-top, 92px))', padding: '20px', textAlign: 'center'
+          minHeight: 'calc(100vh - var(--app-safe-top, 110px))', padding: '20px', textAlign: 'center'
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
           <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>Obuna talab qilinadi</h2>

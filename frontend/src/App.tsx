@@ -9,32 +9,32 @@ function App() {
     const tg = (window as any).Telegram?.WebApp;
 
     const updateSafeInsets = () => {
-      let topInset = 0;
+      let topInset = 110;
       let bottomInset = 0;
 
       if (tg) {
-        // 1. Telegram Bot API 8.0+ contentSafeAreaInset (specifically accounts for close button & top bar)
-        if (tg.contentSafeAreaInset && typeof tg.contentSafeAreaInset.top === 'number' && tg.contentSafeAreaInset.top > 0) {
-          topInset = tg.contentSafeAreaInset.top + 8;
-          bottomInset = tg.contentSafeAreaInset.bottom || 0;
-        } else if (tg.safeAreaInset && typeof tg.safeAreaInset.top === 'number' && tg.safeAreaInset.top > 0) {
-          // Telegram floating close button takes ~44px below device safe area
-          topInset = tg.safeAreaInset.top + 50;
-          bottomInset = tg.safeAreaInset.bottom || 0;
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || tg?.platform === 'ios';
+        const isMobile = isIOS || /Android/i.test(navigator.userAgent) || tg?.platform === 'android';
+
+        if (isIOS) {
+          // On iOS, status bar/dynamic island is 44-59px.
+          // Telegram's floating close button is ~36px tall and ends around 88-95px.
+          // To start cleanly below "✕ Yopish", we need at least 110px.
+          const safeTop = tg.safeAreaInset?.top || tg.contentSafeAreaInset?.top || 54;
+          topInset = Math.max(safeTop + 54, 110);
+          bottomInset = tg.safeAreaInset?.bottom || tg.contentSafeAreaInset?.bottom || 0;
+        } else if (isMobile) {
+          // Android
+          const safeTop = tg.safeAreaInset?.top || tg.contentSafeAreaInset?.top || 32;
+          topInset = Math.max(safeTop + 50, 92);
+          bottomInset = tg.safeAreaInset?.bottom || tg.contentSafeAreaInset?.bottom || 0;
         } else {
-          // Check platform & device
-          const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || tg?.platform === 'ios';
-          const isMobile = isIOS || /Android/i.test(navigator.userAgent) || tg?.platform === 'android';
-          if (isIOS) {
-            topInset = 96; // iOS status bar + close button
-          } else if (isMobile) {
-            topInset = 76; // Android status bar + close button
-          } else {
-            topInset = 24; // Desktop Telegram
-          }
+          // Desktop Telegram
+          topInset = 20;
         }
       } else {
-        topInset = 24;
+        // Regular browser preview
+        topInset = 20;
       }
 
       document.documentElement.style.setProperty('--app-safe-top', `${topInset}px`);
