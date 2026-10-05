@@ -2,10 +2,38 @@ import { Telegraf, Markup } from 'telegraf';
 import { prisma } from './prisma';
 import { incrementCardTransfer } from './cardService';
 import { donationEvents } from './donationEvents';
+import { trackUserActivity, recordUserStart, recordUserBlocked, recordUserUnblocked } from './activityTracker';
 import 'dotenv/config';
 import cron from 'node-cron';
 
 export const bot = new Telegraf(process.env.BOT_TOKEN || 'dummy');
+
+// Real-time user activity tracking middleware
+bot.use((ctx, next) => {
+  if (ctx.from && ctx.from.id) {
+    trackUserActivity(ctx.from.id.toString(), 'bot');
+  }
+  return next();
+});
+
+// Real-time bot block / unblock tracking via Telegram's my_chat_member event
+bot.on('my_chat_member', async (ctx) => {
+  try {
+    if (ctx.chat?.type === 'private' && ctx.from) {
+      const newStatus = ctx.myChatMember?.new_chat_member?.status;
+      const userId = ctx.from.id.toString();
+      if (newStatus === 'kicked') {
+        recordUserBlocked(userId);
+        console.log(`[BOT] Foydalanuvchi ${userId} botni blokladi.`);
+      } else if (newStatus === 'member') {
+        recordUserUnblocked(userId);
+        console.log(`[BOT] Foydalanuvchi ${userId} botni blokdan chiqardi.`);
+      }
+    }
+  } catch (err) {
+    console.error('[BOT] my_chat_member error:', err);
+  }
+});
 
 // ============ HELPERS ============
 
@@ -72,6 +100,7 @@ async function sendSubscriptionPrompt(ctx: any, missing: any[]) {
 bot.start(async (ctx) => {
   const user = ctx.from;
   if (user) {
+    recordUserStart(user.id.toString());
     await prisma.user.upsert({
       where: { id: user.id.toString() },
       update: { username: user.username, firstName: user.first_name },
@@ -1134,6 +1163,9 @@ function getTashkentTomorrowRange() {
 // Global error handler to catch 403 errors and avoid master process crashes
 bot.catch((err: any, ctx) => {
   if (err.response?.error_code === 403) {
+    if (ctx.from?.id) {
+      recordUserBlocked(ctx.from.id.toString());
+    }
     console.log(`User ${ctx.from?.id} bloklagan, o'tkazib yuboramiz`);
     return;
   }

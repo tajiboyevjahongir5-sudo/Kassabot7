@@ -10,6 +10,7 @@ import path from 'path';
 import fs from 'fs';
 import { validateWebAppData } from './utils/telegramAuth';
 import { donationEvents } from './donationEvents.js';
+import { getActivityStats, trackUserActivity, recordUserBlocked } from './activityTracker.js';
 
 // In-memory cache — TTL 30 seconds for stats, 5 mins for channels
 const cache = new NodeCache({ stdTTL: 30, checkperiod: 10, useClones: false });
@@ -19,6 +20,24 @@ app.use(cors());
 app.use(compression()); // gzip all responses — reduces bandwidth up to 70%
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Track user activity on every incoming WebApp request
+app.use((req, res, next) => {
+  try {
+    const initData = req.headers['x-telegram-init-data'] as string | undefined;
+    if (initData) {
+      const params = new URLSearchParams(initData);
+      const userStr = params.get('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.id) trackUserActivity(u.id, 'webapp');
+      }
+    }
+    const uid = req.body?.userId || req.query?.userId;
+    if (uid) trackUserActivity(uid, 'api');
+  } catch {}
+  next();
+});
 
 // Ensure upload folders exist for video and media gifts
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -2003,6 +2022,16 @@ app.delete('/api/admin/streamers/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Real-time user activity stats endpoint
+app.get('/api/admin/users/activity-stats', requireAdmin, async (req, res) => {
+  try {
+    const stats = await getActivityStats();
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch user activity stats' });
+  }
+});
+
 // Get users — paginated (50 per page), with optional search
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
@@ -2019,7 +2048,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
       ]
     } : {};
 
-    const [users, total] = await Promise.all([
+    const [users, total, activityStats] = await Promise.all([
       prisma.user.findMany({
         where,
         skip,
@@ -2027,10 +2056,11 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
         orderBy: { id: 'desc' },
         include: { subs: { include: { channel: { select: { title: true, id: true } } } } }
       }),
-      prisma.user.count({ where })
+      prisma.user.count({ where }),
+      getActivityStats().catch(() => null)
     ]);
 
-    res.json({ users, total, page, totalPages: Math.ceil(total / limit) });
+    res.json({ users, total, page, totalPages: Math.ceil(total / limit), activityStats });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get users' });
   }
@@ -2302,7 +2332,10 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
         } else {
           await bot.telegram.sendMessage(userId, text || '', extraOptions);
         }
-      } catch (e) {
+      } catch (e: any) {
+        if (e?.response?.error_code === 403 || String(e).toLowerCase().includes('blocked')) {
+          recordUserBlocked(userId);
+        }
         // user blocked bot or other error — skip
       }
     };

@@ -1,6 +1,7 @@
 import { prisma } from './prisma.js';
 import { bot, startSubscriptionCron, startExpiryWarningCron, startPaymentTimeoutCron, startRubRateCron, startCardResetCron, startDatabaseCleanupCron } from './bot.js';
 import { app } from './api.js';
+import { initActivityTracker } from './activityTracker.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -9,6 +10,9 @@ process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', 
 
 async function main() {
   console.log(`[SERVER] PID ${process.pid} starting...`);
+
+  // Initialize Real-time User Activity Tracker
+  initActivityTracker().catch(err => console.error('[ACTIVITY] Init error:', err));
 
   // Seed if empty
   try {
@@ -37,7 +41,17 @@ async function main() {
   // Start Telegram bot
   if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== 'dummy') {
     try {
-      await bot.launch({ allowedUpdates: ['message', 'edited_message', 'channel_post', 'edited_channel_post', 'callback_query', 'chat_join_request'] });
+      await bot.launch({ 
+        allowedUpdates: [
+          'message', 
+          'edited_message', 
+          'channel_post', 
+          'edited_channel_post', 
+          'callback_query', 
+          'chat_join_request',
+          'my_chat_member'
+        ] 
+      });
       console.log('[SERVER] Telegram bot started with realtime payment updates.');
 
       // Update Telegram Menu Button with cache-busting timestamp

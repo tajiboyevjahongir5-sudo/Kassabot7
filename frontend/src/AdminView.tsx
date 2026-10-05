@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2, Video, Radio } from 'lucide-react';
+import { Trash2, Plus, Users, Crown, CreditCard, Settings, Send, Save, Box, BarChart2, Clock, Upload, XCircle, Edit2, Video, Radio, Zap } from 'lucide-react';
 import './index.css';
 
 
@@ -93,6 +93,27 @@ export default function AdminView() {
   const [usersPage, setUsersPage] = useState(1);
   const [usersTotalPages, setUsersTotalPages] = useState(1);
   const [usersSearch, setUsersSearch] = useState('');
+  const [userActivity, setUserActivity] = useState<{
+    dailyActive: number;
+    monthlyActive: number;
+    onlineNow: number;
+    totalStarts: number;
+    blockedCount: number;
+    dailyPercent: string;
+    monthlyPercent: string;
+    blockedPercent: string;
+    lastUpdated: number;
+  }>({
+    dailyActive: 0,
+    monthlyActive: 0,
+    onlineNow: 1,
+    totalStarts: 0,
+    blockedCount: 0,
+    dailyPercent: '0',
+    monthlyPercent: '0',
+    blockedPercent: '0',
+    lastUpdated: Date.now()
+  });
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentFilter, setPaymentFilter] = useState('PENDING');
   const [revenue, setRevenue] = useState({ totalRevenue: 0, totalPayments: 0 });
@@ -155,6 +176,9 @@ export default function AdminView() {
           setUsers(usrData.users || []);
           setUsersTotal(usrData.total || 0);
           setUsersTotalPages(usrData.totalPages || 1);
+          if (usrData.activityStats) {
+            setUserActivity(usrData.activityStats);
+          }
         }
       }
       if (payRes.ok) setPayments(await payRes.json());
@@ -226,6 +250,23 @@ export default function AdminView() {
           .catch(() => {});
       }, 5000);
       return () => clearInterval(livePollInterval);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      const fetchActivity = async () => {
+        try {
+          const res = await fetch(`${API_URL}/admin/users/activity-stats`, { headers });
+          if (res.ok) {
+            const data = await res.json();
+            setUserActivity(data);
+          }
+        } catch {}
+      };
+      fetchActivity();
+      const interval = setInterval(fetchActivity, 4000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -2935,6 +2976,221 @@ export default function AdminView() {
                 Foydalanuvchilar
               </h2>
               <span style={{ color: 'var(--accent-cyan)', fontSize: '14px', fontWeight: '500' }}>Jami: {usersTotal || stats.totalUsers} ta</span>
+            </div>
+
+            {/* REAL-TIME FOYDALANUVCHILAR STATISTIKASI BANNERI */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(30, 27, 75, 0.95) 100%)',
+              border: '1.5px solid rgba(0, 240, 255, 0.28)',
+              borderRadius: '20px',
+              padding: '16px 14px',
+              marginBottom: '16px',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 240, 255, 0.12)',
+              position: 'relative',
+              overflow: 'hidden',
+              backdropFilter: 'blur(16px)'
+            }}>
+              {/* Ambient Decorative Backlights */}
+              <div style={{
+                position: 'absolute',
+                top: '-30px',
+                right: '-30px',
+                width: '120px',
+                height: '120px',
+                background: 'radial-gradient(circle, rgba(0, 240, 255, 0.2) 0%, transparent 70%)',
+                filter: 'blur(20px)',
+                pointerEvents: 'none'
+              }} />
+              <div style={{
+                position: 'absolute',
+                bottom: '-30px',
+                left: '-30px',
+                width: '120px',
+                height: '120px',
+                background: 'radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, transparent 70%)',
+                filter: 'blur(20px)',
+                pointerEvents: 'none'
+              }} />
+
+              {/* Banner Header: Title + Live Status */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '14px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                paddingBottom: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '10px',
+                    background: 'rgba(0, 240, 255, 0.12)',
+                    border: '1px solid rgba(0, 240, 255, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#00f0ff'
+                  }}>
+                    <Zap size={17} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                      Faoliyat Statistikasi
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.55)' }}>
+                      Real-time yangilanuvchi ko'rsatkichlar
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Pulse Badge */}
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  borderRadius: '20px',
+                  padding: '4px 10px',
+                  color: '#34d399',
+                  fontSize: '11px',
+                  fontWeight: '700'
+                }}>
+                  <span style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: '#10b981',
+                    boxShadow: '0 0 8px #10b981',
+                    animation: 'pulse 1.5s infinite'
+                  }} />
+                  <span>{userActivity.onlineNow || 1} online</span>
+                </div>
+              </div>
+
+              {/* 4 Core Stat Metric Cards */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '10px',
+                marginBottom: '12px'
+              }}>
+                {/* 1. KUNLIK FAOL (DAU) */}
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.28)',
+                  borderRadius: '14px',
+                  padding: '12px 10px',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#34d399', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                      Kunlik Faol
+                    </span>
+                    <span style={{ fontSize: '13px' }}>⚡</span>
+                  </div>
+                  <div style={{ fontSize: '21px', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px', marginBottom: '2px' }}>
+                    {(userActivity.dailyActive || 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.55)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>So'nggi 24 soat</span>
+                    <span style={{ color: '#34d399', fontWeight: '700' }}>• {userActivity.dailyPercent || 0}%</span>
+                  </div>
+                </div>
+
+                {/* 2. OYLIK FAOL (MAU) */}
+                <div style={{
+                  background: 'rgba(168, 85, 247, 0.08)',
+                  border: '1px solid rgba(168, 85, 247, 0.28)',
+                  borderRadius: '14px',
+                  padding: '12px 10px',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#c084fc', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                      Oylik Faol
+                    </span>
+                    <span style={{ fontSize: '13px' }}>🚀</span>
+                  </div>
+                  <div style={{ fontSize: '21px', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px', marginBottom: '2px' }}>
+                    {(userActivity.monthlyActive || 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.55)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>So'nggi 30 kun</span>
+                    <span style={{ color: '#c084fc', fontWeight: '700' }}>• {userActivity.monthlyPercent || 0}%</span>
+                  </div>
+                </div>
+
+                {/* 3. UMUMIY START BOSGANLAR */}
+                <div style={{
+                  background: 'rgba(0, 240, 255, 0.08)',
+                  border: '1px solid rgba(0, 240, 255, 0.28)',
+                  borderRadius: '14px',
+                  padding: '12px 10px',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#00f0ff', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                      Start Bosganlar
+                    </span>
+                    <span style={{ fontSize: '13px' }}>👥</span>
+                  </div>
+                  <div style={{ fontSize: '21px', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px', marginBottom: '2px' }}>
+                    {(userActivity.totalStarts || usersTotal || stats.totalUsers || 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.55)' }}>
+                    Jami a'zolar soni
+                  </div>
+                </div>
+
+                {/* 4. BOTNI BLOK QILGANLAR */}
+                <div style={{
+                  background: 'rgba(244, 63, 94, 0.08)',
+                  border: '1px solid rgba(244, 63, 94, 0.28)',
+                  borderRadius: '14px',
+                  padding: '12px 10px',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#fb7185', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                      Blok Qilganlar
+                    </span>
+                    <span style={{ fontSize: '13px' }}>🚫</span>
+                  </div>
+                  <div style={{ fontSize: '21px', fontWeight: '900', color: '#f43f5e', letterSpacing: '-0.5px', marginBottom: '2px' }}>
+                    {(userActivity.blockedCount || 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.55)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Botni to'xtatgan</span>
+                    <span style={{ color: '#fb7185', fontWeight: '700' }}>• {userActivity.blockedPercent || 0}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Activity Summary Bar */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: '10px',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '11px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255, 255, 255, 0.65)' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#10b981' }} />
+                  <span>Faollik darajasi:</span>
+                </div>
+                <div style={{ fontWeight: '700', color: '#00f0ff' }}>
+                  {userActivity.monthlyPercent || '0'}% oylik / {userActivity.dailyPercent || '0'}% kunlik
+                </div>
+              </div>
             </div>
 
             {/* Search */}
