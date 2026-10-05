@@ -1897,7 +1897,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
       <div style={{
         position: 'relative',
         zIndex: 20,
-        padding: 'calc(10px + env(safe-area-inset-top, 0px)) 12px 10px 12px',
+        padding: 'calc(var(--app-safe-top, calc(env(safe-area-inset-top, 0px) + 50px)) + 10px) 12px 10px 12px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -2121,7 +2121,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           /* OVOZLI VIDEO / GIF DONAT ALERT */
           <div style={{
             position: 'absolute',
-            top: '70px',
+            top: 'calc(var(--app-safe-top, calc(env(safe-area-inset-top, 0px) + 50px)) + 58px)',
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 95,
@@ -2214,7 +2214,7 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
           /* STANDART EMOJI SOVG'A ALERT */
           <div style={{
             position: 'absolute',
-            top: '72px',
+            top: 'calc(var(--app-safe-top, calc(env(safe-area-inset-top, 0px) + 50px)) + 58px)',
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 90,
