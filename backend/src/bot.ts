@@ -16,27 +16,6 @@ bot.use((ctx, next) => {
   return next();
 });
 
-// Real-time bot block / unblock tracking via Telegram's my_chat_member event
-bot.on('my_chat_member', async (ctx) => {
-  try {
-    if (ctx.chat?.type === 'private' && ctx.from) {
-      const newStatus = ctx.myChatMember?.new_chat_member?.status;
-      const userId = ctx.from.id.toString();
-      if (newStatus === 'kicked') {
-        recordUserBlocked(userId);
-        console.log(`[BOT] Foydalanuvchi ${userId} botni blokladi.`);
-      } else if (newStatus === 'member') {
-        recordUserUnblocked(userId);
-        console.log(`[BOT] Foydalanuvchi ${userId} botni blokdan chiqardi.`);
-      }
-    }
-  } catch (err) {
-    console.error('[BOT] my_chat_member error:', err);
-  }
-});
-
-// ============ HELPERS ============
-
 // Parse ADMIN_ID env variable (supports comma-separated IDs)
 function getAdminIds(): string[] {
   const adminId = process.env.ADMIN_ID;
@@ -48,6 +27,81 @@ export function isAdmin(userId: string): boolean {
   const adminIds = getAdminIds();
   return adminIds.includes(userId);
 }
+
+// Real-time bot block/unblock AND auto-connecting Zayavka channels when bot is made admin
+bot.on('my_chat_member', async (ctx) => {
+  try {
+    // 1. Private chat: user blocked/unblocked bot
+    if (ctx.chat?.type === 'private' && ctx.from) {
+      const newStatus = ctx.myChatMember?.new_chat_member?.status;
+      const userId = ctx.from.id.toString();
+      if (newStatus === 'kicked') {
+        recordUserBlocked(userId);
+        console.log(`[BOT] Foydalanuvchi ${userId} botni blokladi.`);
+      } else if (newStatus === 'member') {
+        recordUserUnblocked(userId);
+        console.log(`[BOT] Foydalanuvchi ${userId} botni blokdan chiqardi.`);
+      }
+    }
+
+    // 2. Channel or Supergroup: bot added as administrator!
+    if (ctx.chat?.type === 'channel' || ctx.chat?.type === 'supergroup') {
+      const newStatus = ctx.myChatMember?.new_chat_member?.status;
+      const chatId = ctx.chat.id.toString();
+      const channelTitle = (ctx.chat as any).title || 'Noma\'lum kanal';
+
+      if (newStatus === 'administrator') {
+        console.log(`[BOT] Bot ${channelTitle} (${chatId}) kanaliga admin qilindi! Zayavka avtomatik ulanmoqda...`);
+
+        // Automatically create/fetch Join Request invite link
+        let inviteLink: string | null = null;
+        try {
+          const linkObj = await bot.telegram.createChatInviteLink(chatId, {
+            creates_join_request: true,
+            name: 'Kassabot VIP Zayavka'
+          });
+          inviteLink = linkObj.invite_link;
+        } catch {
+          try {
+            inviteLink = (ctx.chat as any).invite_link || await bot.telegram.exportChatInviteLink(chatId);
+          } catch {}
+        }
+
+        // Auto-save to JoinRequestChannel table
+        await (prisma as any).joinRequestChannel.upsert({
+          where: { channelId: chatId },
+          update: {
+            title: channelTitle,
+            ...(inviteLink ? { inviteLink } : {})
+          },
+          create: {
+            channelId: chatId,
+            title: channelTitle,
+            inviteLink: inviteLink || null
+          }
+        });
+
+        // Notify admins about the auto-connected channel
+        const adminIds = getAdminIds();
+        for (const aid of adminIds) {
+          try {
+            await bot.telegram.sendMessage(
+              aid,
+              `🎉 <b>Yangi Zayavka kanali avtomatik ulandi!</b>\n\n` +
+              `📢 <b>Nomi:</b> ${channelTitle}\n` +
+              `🆔 <b>ID:</b> <code>${chatId}</code>\n` +
+              (inviteLink ? `🔗 <b>Zayavka havolasi:</b> ${inviteLink}\n\n` : `\n`) +
+              `✅ Bot kanalga admin qilingani uchun havola va nom avtomatik olindi va saqlandi!`,
+              { parse_mode: 'HTML' }
+            );
+          } catch {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[BOT] my_chat_member error:', err);
+  }
+});
 
 // ============ MANDATORY SUBSCRIPTION CHECK ============
 
@@ -1207,26 +1261,11 @@ export function startExpiryWarningCron() {
 }
 
 // 3. Auto-cancel payments older than 3 minutes (every 60 seconds)
+// 3. Auto-cancel stale pending payments older than 24 hours (every 10 minutes)
 export function startPaymentTimeoutCron() {
-  // One-time cleanup on startup: cancel all stale pending payments older than 3 min
-  (async () => {
-    try {
-      const staleDate = new Date(Date.now() - 3 * 60 * 1000);
-      const result = await prisma.payment.updateMany({
-        where: { status: 'PENDING', createdAt: { lt: staleDate } },
-        data: { status: 'CANCELLED' }
-      });
-      if (result.count > 0) {
-        console.log(`[STARTUP] Cleaned up ${result.count} stale pending payments.`);
-      }
-    } catch (err) {
-      console.error('[STARTUP] Stale payment cleanup error:', err);
-    }
-  })();
-
   setInterval(async () => {
     try {
-      const timeoutDate = new Date(Date.now() - 3 * 60 * 1000); // 3 daqiqa
+      const timeoutDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 soat kutiladi
 
       const count = await prisma.payment.updateMany({
         where: { status: 'PENDING', createdAt: { lt: timeoutDate } },
@@ -1234,12 +1273,12 @@ export function startPaymentTimeoutCron() {
       });
 
       if (count.count > 0) {
-        console.log(`Auto-cancelled ${count.count} expired payments (older than 3min).`);
+        console.log(`[PAYMENT] Auto-cancelled ${count.count} expired payments (older than 24h).`);
       }
     } catch (err) {
       console.error('Error in payment timeout cron:', err);
     }
-  }, 60 * 1000); // Check every 60 seconds
+  }, 10 * 60 * 1000); // Check every 10 minutes
 }
 
 // 6. Auto database cleanup: purge CANCELLED payments older than 24 hours to keep DB lightweight

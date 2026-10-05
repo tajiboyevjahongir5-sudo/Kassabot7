@@ -617,7 +617,7 @@ app.get('/api/admin/join-request-channels', requireAdmin, async (_req, res) => {
   }
 });
 
-// Add a new join request channel
+// Add or auto-connect a join request channel
 app.post('/api/admin/join-request-channels', requireAdmin, async (req, res) => {
   try {
     const { channelId, title, inviteLink, customMessage } = req.body;
@@ -627,31 +627,50 @@ app.post('/api/admin/join-request-channels', requireAdmin, async (req, res) => {
 
     const cleanChannelId = String(channelId).trim();
     let finalTitle = title ? String(title).trim() : '';
+    let finalInviteLink = inviteLink ? String(inviteLink).trim() : '';
 
-    if (!finalTitle) {
-      try {
-        const chat = await bot.telegram.getChat(cleanChannelId);
-        if ((chat as any).title) finalTitle = (chat as any).title;
-      } catch {}
-      if (!finalTitle) finalTitle = `Kanal ${cleanChannelId}`;
+    // Automatically fetch channel title and invite link via Telegram API
+    try {
+      const chat = await bot.telegram.getChat(cleanChannelId);
+      if (!finalTitle && (chat as any).title) {
+        finalTitle = (chat as any).title;
+      }
+      if (!finalInviteLink) {
+        try {
+          const linkObj = await bot.telegram.createChatInviteLink(cleanChannelId, {
+            creates_join_request: true,
+            name: 'Kassabot VIP Zayavka'
+          });
+          finalInviteLink = linkObj.invite_link;
+        } catch {
+          finalInviteLink = (chat as any).invite_link || await bot.telegram.exportChatInviteLink(cleanChannelId).catch(() => '');
+        }
+      }
+    } catch (e: any) {
+      console.warn('[ZAYAVKA] Telegram getChat warning:', e?.message || e);
     }
 
-    const created = await (prisma as any).joinRequestChannel.create({
-      data: {
+    if (!finalTitle) finalTitle = `Kanal ${cleanChannelId}`;
+
+    const saved = await (prisma as any).joinRequestChannel.upsert({
+      where: { channelId: cleanChannelId },
+      update: {
+        title: finalTitle,
+        ...(finalInviteLink ? { inviteLink: finalInviteLink } : {}),
+        customMessage: customMessage ? String(customMessage).trim() : null
+      },
+      create: {
         channelId: cleanChannelId,
         title: finalTitle,
-        inviteLink: inviteLink ? String(inviteLink).trim() : null,
+        inviteLink: finalInviteLink || null,
         customMessage: customMessage ? String(customMessage).trim() : null
       }
     });
 
-    res.json(created);
+    res.json(saved);
   } catch (err: any) {
-    if (err?.code === 'P2002') {
-      return res.status(400).json({ error: 'Bu kanal ID allaqachon mavjud' });
-    }
     console.error('create join-request-channel error:', err);
-    res.status(500).json({ error: 'Failed to create join request channel' });
+    res.status(500).json({ error: 'Kanalni saqlashda xatolik yuz berdi' });
   }
 });
 

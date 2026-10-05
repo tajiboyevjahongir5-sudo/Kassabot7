@@ -2649,6 +2649,19 @@ export default function AdminView() {
                     >✕</button>
                   </div>
 
+                  <div style={{
+                    background: 'rgba(0, 240, 255, 0.08)',
+                    border: '1px solid rgba(0, 240, 255, 0.25)',
+                    borderRadius: '12px',
+                    padding: '10px 12px',
+                    marginBottom: '14px',
+                    fontSize: '11.5px',
+                    color: '#e0f2fe',
+                    lineHeight: '1.5'
+                  }}>
+                    💡 <b>Avtomatik ulash:</b> Botni kanalingizga <b>admin</b> qilsangiz kifoya! Bot kanal nomi va zayavka havolasini o'zi avtomatik oladi va bu yerga ulaydi.
+                  </div>
+
                   <form onSubmit={handleSaveJrChannel} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div>
                       <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
@@ -2658,23 +2671,23 @@ export default function AdminView() {
                         className="cyber-input" 
                         style={{ width: '100%' }} 
                         required
-                        placeholder="-100123456789"
+                        placeholder="-100123456789 yoki @kanal_username"
                         value={newJrChannelId} 
                         onChange={e => setNewJrChannelId(e.target.value)} 
                       />
                       <p style={{ fontSize: '10px', opacity: 0.6, margin: '4px 0 0 0' }}>
-                        Bot ushbu kanalda admin bo'lishi va zayavkalarni ko'ra olishi shart.
+                        Faqat ID kiritsangiz ham bot kanal nomi va havolasini o'zi avtomatik topib oladi.
                       </p>
                     </div>
 
                     <div>
                       <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
-                        Kanal nomi (ixtiyoriy)
+                        Kanal nomi (ixtiyoriy — bot o'zi avtomatik oladi)
                       </label>
                       <input 
                         className="cyber-input" 
                         style={{ width: '100%' }} 
-                        placeholder="Masalan: VIP Kanal 1"
+                        placeholder="Bo'sh qoldiring, bot o'zi aniqlaydi"
                         value={newJrTitle} 
                         onChange={e => setNewJrTitle(e.target.value)} 
                       />
@@ -2682,12 +2695,12 @@ export default function AdminView() {
 
                     <div>
                       <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>
-                        Kanalga havola (ixtiyoriy)
+                        Kanalga havola (ixtiyoriy — bot zayavka havolasi yaratadi)
                       </label>
                       <input 
                         className="cyber-input" 
                         style={{ width: '100%' }} 
-                        placeholder="https://t.me/+abc123..."
+                        placeholder="Bo'sh qoldiring, bot avtomatik zayavka havolasi oladi"
                         value={newJrInviteLink} 
                         onChange={e => setNewJrInviteLink(e.target.value)} 
                       />
