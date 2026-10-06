@@ -150,8 +150,9 @@ function UserView() {
       })
       .catch(err => console.error(err));
 
-    // Poll live stream status every 10 seconds
+    // Poll live stream status every 15 seconds (only when app is actively open/visible)
     const checkLive = async () => {
+      if (document.hidden) return; // Save bandwidth and egress when app is backgrounded
       try {
         const res = await fetch(`${API_URL}/live/status`);
         if (res.ok) {
@@ -161,7 +162,7 @@ function UserView() {
       } catch {}
     };
     checkLive();
-    const liveInterval = setInterval(checkLive, 10000);
+    const liveInterval = setInterval(checkLive, 15000);
 
     return () => clearInterval(liveInterval);
   }, []);

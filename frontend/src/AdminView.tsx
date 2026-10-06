@@ -230,10 +230,11 @@ export default function AdminView() {
     }
     fetchData();
 
-    // Real-time polling for join requests (every 5 seconds)
+    // Real-time polling for join requests (every 6 seconds, visible only)
     const jrInterval = setInterval(() => {
+      if (document.hidden) return;
       fetchJoinRequestStats();
-    }, 5000);
+    }, 6000);
 
     return () => clearInterval(jrInterval);
   }, []);
@@ -242,13 +243,14 @@ export default function AdminView() {
     if (activeTab === 'videochat') {
       fetchStreamersAndLive();
       const livePollInterval = setInterval(() => {
+        if (document.hidden) return;
         fetch(`${API_URL}/live/status`)
           .then(r => r.json())
           .then(lData => {
             setAdminLiveStream(lData.active ? lData.stream : null);
           })
           .catch(() => {});
-      }, 5000);
+      }, 6000);
       return () => clearInterval(livePollInterval);
     }
   }, [activeTab]);
@@ -256,6 +258,7 @@ export default function AdminView() {
   useEffect(() => {
     if (activeTab === 'users') {
       const fetchActivity = async () => {
+        if (document.hidden) return;
         try {
           const res = await fetch(`${API_URL}/admin/users/activity-stats`, { headers });
           if (res.ok) {
@@ -265,7 +268,7 @@ export default function AdminView() {
         } catch {}
       };
       fetchActivity();
-      const interval = setInterval(fetchActivity, 4000);
+      const interval = setInterval(fetchActivity, 5000);
       return () => clearInterval(interval);
     }
   }, [activeTab]);

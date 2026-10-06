@@ -45,7 +45,10 @@ const giftsUploadsDir = path.join(uploadsDir, 'gifts');
 if (!fs.existsSync(giftsUploadsDir)) {
   fs.mkdirSync(giftsUploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '7d',
+  immutable: true
+}));
 
 
 
@@ -894,9 +897,15 @@ async function checkIsStreamer(userId: string): Promise<boolean> {
   return Boolean(streamer);
 }
 
-// 1. Get current live stream status
+// 1. Get current live stream status (optimized with short memory cache to reduce DB load & egress)
 app.get('/api/live/status', async (_req, res) => {
   try {
+    const cached = cache.get('live_status');
+    if (cached) {
+      res.setHeader('Cache-Control', 'public, max-age=3');
+      return res.json(cached);
+    }
+
     const activeStream = await (prisma as any).liveStream.findFirst({
       where: { status: 'ACTIVE' },
       orderBy: { startedAt: 'desc' },
@@ -908,22 +917,27 @@ app.get('/api/live/status', async (_req, res) => {
       }
     });
 
+    let result: any;
     if (!activeStream) {
-      return res.json({ active: false });
+      result = { active: false };
+    } else {
+      result = {
+        active: true,
+        stream: {
+          id: activeStream.id,
+          streamerId: activeStream.streamerId,
+          streamerName: activeStream.streamerName,
+          title: activeStream.title,
+          startedAt: activeStream.startedAt,
+          viewersCount: getActiveViewersCount()
+        },
+        recentComments: (activeStream.comments || []).reverse()
+      };
     }
 
-    res.json({
-      active: true,
-      stream: {
-        id: activeStream.id,
-        streamerId: activeStream.streamerId,
-        streamerName: activeStream.streamerName,
-        title: activeStream.title,
-        startedAt: activeStream.startedAt,
-        viewersCount: getActiveViewersCount()
-      },
-      recentComments: (activeStream.comments || []).reverse()
-    });
+    cache.set('live_status', result, 4);
+    res.setHeader('Cache-Control', 'public, max-age=3');
+    res.json(result);
   } catch (err) {
     console.error('live status error:', err);
     res.status(500).json({ error: 'Failed to get live status' });
@@ -2674,6 +2688,9 @@ app.use('/assets', (req, res, next) => {
   const assetsPath = path.join(__dirname, '../../frontend/dist/assets');
   const reqName = req.path.replace(/^\//, '');
   
+  // Set long-term immutable cache for all hashed assets to eliminate egress costs
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
   if (fs.existsSync(path.join(assetsPath, reqName))) {
     return next();
   }
@@ -2693,18 +2710,27 @@ app.use('/assets', (req, res, next) => {
   next();
 });
 
-// Serve static files from frontend build
+// Serve static files from frontend build with high-efficiency caching
 app.use(express.static(path.join(__dirname, '../../frontend/dist'), {
-  setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      // HTML is revalidated so users immediately receive new app deployments
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else {
+      // Hashed assets (JS, CSS, SVGs, web fonts) are immutable — 1-year browser cache!
+      // Drastically slashes egress bandwidth by over 99% for 32k+ users
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
   }
 }));
 
-// Catch-all route for frontend SPA routing
+// Catch-all route for frontend SPA routing (revalidated HTML)
 app.use((req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate, private');
   res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');

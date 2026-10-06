@@ -58,15 +58,14 @@ async function main() {
       const webAppUrl = process.env.WEBAPP_URL;
       if (webAppUrl) {
         try {
-          const sep = webAppUrl.includes('?') ? '&' : '?';
           await (bot.telegram as any).callApi('setChatMenuButton', {
             menu_button: {
               type: 'web_app',
               text: 'DIORA VIP',
-              web_app: { url: `${webAppUrl}${sep}_v=${Date.now()}` }
+              web_app: { url: webAppUrl }
             }
           });
-          console.log('[SERVER] Telegram Menu Button updated with cache buster.');
+          console.log('[SERVER] Telegram Menu Button updated.');
         } catch (menuErr) {
           console.error('[SERVER] Menu button update error:', menuErr);
         }

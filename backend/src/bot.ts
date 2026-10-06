@@ -170,8 +170,7 @@ bot.start(async (ctx) => {
 
   function getFreshWebAppUrl(base: string, params: string = ''): string {
     const sep = base.includes('?') ? '&' : '?';
-    const vTag = `_t=${Date.now()}`;
-    return params ? `${base}${sep}${params}&${vTag}` : `${base}${sep}${vTag}`;
+    return params ? `${base}${sep}${params}` : base;
   }
 
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
@@ -211,7 +210,6 @@ bot.start(async (ctx) => {
 
 bot.command('videochat', async (ctx) => {
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
-  const vTag = `_t=${Date.now()}`;
   const sep = webAppUrl.includes('?') ? '&' : '?';
   await ctx.reply(
     `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing:`,
@@ -219,7 +217,7 @@ bot.command('videochat', async (ctx) => {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}${sep}tab=videochat&${vTag}` } }]
+          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}${sep}tab=videochat` } }]
         ]
       }
     }
@@ -228,7 +226,6 @@ bot.command('videochat', async (ctx) => {
 
 bot.hears(['🎥 VIDEOCHAT', '🎥 VIDEOCHAT (JONLI EFIR)', 'VIDEOCHAT', 'Videochat'], async (ctx) => {
   const webAppUrl = process.env.WEBAPP_URL || 'https://google.com';
-  const vTag = `_t=${Date.now()}`;
   const sep = webAppUrl.includes('?') ? '&' : '?';
   await ctx.reply(
     `🔴 <b>VIP VIDEOCHAT JONLI EFIR</b>\n\nJonli efirga kirish uchun pastdagi tugmani bosing:`,
@@ -236,7 +233,7 @@ bot.hears(['🎥 VIDEOCHAT', '🎥 VIDEOCHAT (JONLI EFIR)', 'VIDEOCHAT', 'Videoc
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}${sep}tab=videochat&${vTag}` } }]
+          [{ text: '🔴 VIDEOCHATGA KIRISH', web_app: { url: `${webAppUrl}${sep}tab=videochat` } }]
         ]
       }
     }
