@@ -1056,38 +1056,48 @@ app.post('/api/live/start', async (req, res) => {
 
 let lastStreamerHeartbeatTime = 0;
 
-// Streamer Heartbeat endpoint (Streamer botdan chiqib ketganini aniqlash)
+// Streamer Heartbeat endpoint (Streamer faol ekanligini bildirish)
 app.post('/api/live/heartbeat', (req, res) => {
   lastStreamerHeartbeatTime = Date.now();
   res.json({ ok: true });
 });
 
-// Periodic check: if streamer leaves without stopping, auto-end stream after 12 seconds
+// Periodic Watchdog: Any ACTIVE stream in DB MUST have an active streamer!
+// If no streamer SSE connection and no heartbeat within 15 seconds, AUTO-TERMINATE!
 setInterval(async () => {
-  if (lastStreamerHeartbeatTime > 0 && Date.now() - lastStreamerHeartbeatTime > 12000) {
-    lastStreamerHeartbeatTime = 0;
-    try {
-      const activeStream = await (prisma as any).liveStream.findFirst({
-        where: { status: 'ACTIVE' }
+  try {
+    const activeStream = await (prisma as any).liveStream.findFirst({
+      where: { status: 'ACTIVE' }
+    });
+    if (!activeStream) return;
+
+    // Grace period of 10s after starting
+    const streamAge = Date.now() - new Date(activeStream.startedAt).getTime();
+    if (streamAge < 10000) return;
+
+    const hasStreamerSSE = activeLiveClients.some(c => c.role === 'streamer' && !c.res.writableEnded && !c.res.destroyed);
+    const hasRecentHeartbeat = lastStreamerHeartbeatTime > 0 && (Date.now() - lastStreamerHeartbeatTime < 15000);
+
+    // If neither SSE nor heartbeat is active, streamer disconnected!
+    if (!hasStreamerSSE && !hasRecentHeartbeat) {
+      console.log(`[LIVE AUTO-STOP] Streamer aloqada emas (SSE yo'q, Heartbeat uzildi). Efir #${activeStream.id} avtomatik to'xtatildi.`);
+      await (prisma as any).liveStream.updateMany({
+        where: { status: 'ACTIVE' },
+        data: { status: 'ENDED', endedAt: new Date() }
       });
-      if (activeStream) {
-        console.log(`[LIVE AUTO-STOP] Streamer botdan chiqib ketdi (12s aloqa yo'q). Efir #${activeStream.id} avtomatik to'xtatildi.`);
-        await (prisma as any).liveStream.updateMany({
-          where: { status: 'ACTIVE' },
-          data: { status: 'ENDED', endedAt: new Date() }
-        });
-        lastLiveFrame = null;
-        broadcastLiveEvent('stream_ended', { 
-          message: 'Streamer efirdan chiqib ketdi, jonli efir yakunlandi',
-          endedBy: 'auto_exit'
-        });
-        broadcastLiveEvent('viewers_count', { count: 0 });
-      }
-    } catch (e) {
-      console.error('Auto end stream error:', e);
+      lastLiveFrame = null;
+      lastStreamerHeartbeatTime = 0;
+      cache.del('live_status');
+      broadcastLiveEvent('stream_ended', { 
+        message: 'Streamer efirdan chiqib ketdi, jonli efir yakunlandi',
+        endedBy: 'auto_exit'
+      });
+      broadcastLiveEvent('viewers_count', { count: 0 });
     }
+  } catch (e) {
+    console.error('Watchdog error:', e);
   }
-}, 4000);
+}, 5000);
 
 // 5. End live stream (Called by streamer or admin)
 app.post('/api/live/end', async (req, res) => {
@@ -1100,7 +1110,18 @@ app.post('/api/live/end', async (req, res) => {
     const isAdmin = checkRequestIsAdmin(req);
     const isStreamer = streamerId ? await checkIsStreamer(streamerId) : false;
 
-    if (!isAdmin && !isStreamer && streamerId !== undefined) {
+    // Check if the caller matches the creator/streamer of this active stream
+    let isOwnerOfStream = false;
+    if (streamId) {
+      try {
+        const targetStream = await (prisma as any).liveStream.findUnique({ where: { id: Number(streamId) } });
+        if (targetStream && streamerId && String(targetStream.streamerId) === String(streamerId)) {
+          isOwnerOfStream = true;
+        }
+      } catch {}
+    }
+
+    if (!isAdmin && !isStreamer && !isOwnerOfStream && streamerId !== undefined) {
       return res.status(403).json({ error: 'Ruxsat berilmagan' });
     }
 
@@ -1113,13 +1134,14 @@ app.post('/api/live/end', async (req, res) => {
       }).catch(() => {});
     }
 
-    // Always ensure all active streams are ended
+    // Always ensure all active streams are ended in DB
     await (prisma as any).liveStream.updateMany({
       where: { status: 'ACTIVE' },
       data: { status: 'ENDED', endedAt: new Date() }
     });
 
     lastLiveFrame = null;
+    cache.del('live_status');
     broadcastLiveEvent('stream_ended', { 
       message: isAdmin ? 'Jonli efir admin tomonidan to\'xtatildi' : 'Jonli efir yakunlandi',
       endedBy: isAdmin ? 'admin' : 'streamer'
@@ -1151,6 +1173,8 @@ app.post('/api/admin/live/end', requireAdmin, async (req, res) => {
     });
 
     lastLiveFrame = null;
+    lastStreamerHeartbeatTime = 0;
+    cache.del('live_status');
     broadcastLiveEvent('stream_ended', { 
       message: 'Jonli efir admin tomonidan to\'xtatildi',
       endedBy: 'admin'

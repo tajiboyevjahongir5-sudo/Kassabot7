@@ -14,6 +14,19 @@ async function main() {
   // Initialize Real-time User Activity Tracker
   initActivityTracker().catch(err => console.error('[ACTIVITY] Init error:', err));
 
+  // Clean up any stale active streams from previous server process
+  try {
+    const staleStreams = await (prisma as any).liveStream.updateMany({
+      where: { status: 'ACTIVE' },
+      data: { status: 'ENDED', endedAt: new Date() }
+    });
+    if (staleStreams.count > 0) {
+      console.log(`[SERVER] ${staleStreams.count} ta tugatilmagan eski efir avtomatik yopildi.`);
+    }
+  } catch (cleanErr) {
+    console.error('[SERVER] Stale stream cleanup error:', cleanErr);
+  }
+
   // Seed if empty
   try {
     const channelCount = await prisma.channel.count();

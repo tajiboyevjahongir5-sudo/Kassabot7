@@ -348,6 +348,21 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
 
   // Safe Exit: completely terminates all streams, intervals, SSE, audio before navigating away
   const handleExit = () => {
+    if (isBroadcasting || (liveStream && String(liveStream.streamerId) === String(userId))) {
+      const streamId = liveStream?.id;
+      const payload = JSON.stringify({ streamId, streamerId: userId });
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon(`${API_URL}/live/end`, blob);
+      } else {
+        fetch(`${API_URL}/live/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true
+        }).catch(() => {});
+      }
+    }
     stopMediaStream();
     if (sseRef.current) {
       try { sseRef.current.close(); } catch {}
@@ -360,6 +375,8 @@ export default function VideoChat({ userId, userName, onBack }: VideoChatProps) 
     if ('speechSynthesis' in window) {
       try { window.speechSynthesis.cancel(); } catch {}
     }
+    setIsBroadcasting(false);
+    setIsLiveActive(false);
     onBack();
   };
 
