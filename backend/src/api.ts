@@ -2380,12 +2380,25 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
     const BATCH_SIZE = 25; // Send 25 at a time
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+    // Trafik tejash: media faqat BIRINCHI muvaffaqiyatli yuborishda yuklanadi, qolganlarga Telegram file_id orqali ketadi.
+    // Avval har bir foydalanuvchiga butun fayl qaytadan yuklanardi (1000 foydalanuvchi x 20 MB video = 20 GB).
+    let mediaFileId: string | null = null;
+    const mediaInput = () => (mediaFileId ? mediaFileId : { source: mediaBuffer as Buffer });
+    const sendMedia = async (userId: string) => {
+      if (isVideo) {
+        const m: any = await bot.telegram.sendVideo(userId, mediaInput(), { caption: text || '', ...extraOptions });
+        if (!mediaFileId && m?.video?.file_id) mediaFileId = m.video.file_id;
+      } else {
+        const m: any = await bot.telegram.sendPhoto(userId, mediaInput(), { caption: text || '', ...extraOptions });
+        const sizes = m?.photo;
+        if (!mediaFileId && Array.isArray(sizes) && sizes.length) mediaFileId = sizes[sizes.length - 1].file_id;
+      }
+    };
+
     const sendOne = async (userId: string) => {
       try {
-        if (mediaBuffer && isVideo) {
-          await bot.telegram.sendVideo(userId, { source: mediaBuffer }, { caption: text || '', ...extraOptions });
-        } else if (mediaBuffer) {
-          await bot.telegram.sendPhoto(userId, { source: mediaBuffer }, { caption: text || '', ...extraOptions });
+        if (mediaBuffer) {
+          await sendMedia(userId);
         } else {
           await bot.telegram.sendMessage(userId, text || '', extraOptions);
         }
@@ -2397,7 +2410,14 @@ app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
       }
     };
 
-    for (let i = 0; i < users.length; i += BATCH_SIZE) {
+    // Birinchi file_id olinmaguncha bittadan yuboramiz (aks holda 25 ta parallel yuklash bo'lardi)
+    let start = 0;
+    while (mediaBuffer && !mediaFileId && start < users.length) {
+      await sendOne(users[start].id);
+      start++;
+    }
+
+    for (let i = start; i < users.length; i += BATCH_SIZE) {
       const batch = users.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(u => sendOne(u.id)));
       if (i + BATCH_SIZE < users.length) {
