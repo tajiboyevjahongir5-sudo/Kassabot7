@@ -9,7 +9,10 @@ const pool = new Pool({
   min: 2,                     // keep 2 warm connections always ready
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ssl: { rejectUnauthorized: false }
+  // Railway ichki tarmog'idagi Postgres uchun SSL kerak emas
+  ssl: connectionString && /\.railway\.internal|localhost|127\.0\.0\.1/.test(connectionString)
+    ? false
+    : { rejectUnauthorized: false }
 });
 
 const adapter = new PrismaPg(pool);
