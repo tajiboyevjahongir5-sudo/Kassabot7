@@ -11,10 +11,15 @@ function sslFor(url) {
   return { rejectUnauthorized: false };
 }
 
-function clean(url) {
-  // pg kutubxonasi channel_binding parametrini qo'llamaydi
-  return url.replace(/([?&])channel_binding=[^&]*&?/, '$1').replace(/[?&]$/, '');
+function parse(url) {
+  // pg kutubxonasi channel_binding va schema parametrlarini qo'llamaydi
+  const u = new URL(url);
+  const schema = u.searchParams.get('schema') || 'public';
+  u.searchParams.delete('schema');
+  u.searchParams.delete('channel_binding');
+  return { url: u.toString(), schema };
 }
+function clean(url) { return parse(url).url; }
 
 async function main() {
   const oldUrl = process.env.OLD_DATABASE_URL;
@@ -29,7 +34,8 @@ async function main() {
   }
 
   const tag = crypto.createHash('sha256').update(clean(oldUrl)).digest('hex').slice(0, 16);
-  const dst = new Client({ connectionString: clean(newUrl), ssl: sslFor(newUrl) });
+  const D = parse(newUrl), S = parse(oldUrl);
+  const dst = new Client({ connectionString: D.url, ssl: sslFor(newUrl), options: `-c search_path="${D.schema}"` });
   await dst.connect();
   await dst.query('CREATE TABLE IF NOT EXISTS "_old_db_migration" (tag TEXT PRIMARY KEY, done_at TIMESTAMPTZ DEFAULT now(), summary TEXT)');
   const done = await dst.query('SELECT 1 FROM "_old_db_migration" WHERE tag=$1', [tag]);
@@ -39,7 +45,7 @@ async function main() {
     return;
   }
 
-  const src = new Client({ connectionString: clean(oldUrl), ssl: sslFor(oldUrl), connectionTimeoutMillis: 15000 });
+  const src = new Client({ connectionString: S.url, ssl: sslFor(oldUrl), connectionTimeoutMillis: 15000, options: `-c search_path="${S.schema}"` });
   try {
     await src.connect();
   } catch (e) {
@@ -48,11 +54,12 @@ async function main() {
     return;
   }
 
+  const sch = (c) => (c === src ? S.schema : D.schema);
   const listTables = async (c) => (await c.query(
-    "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name NOT LIKE '\\_%'"
+    "SELECT table_name FROM information_schema.tables WHERE table_schema=$1 AND table_type='BASE TABLE' AND table_name NOT LIKE '\\_%'", [sch(c)]
   )).rows.map(r => r.table_name);
   const listCols = async (c, t) => (await c.query(
-    "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1", [t]
+    "SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2", [sch(c), t]
   )).rows.map(r => r.column_name);
 
   const srcTables = await listTables(src);
@@ -81,7 +88,7 @@ async function main() {
       }
       // autoincrement ketma-ketligini moslash
       if (cols.includes('id')) {
-        const seq = await dst.query(`SELECT pg_get_serial_sequence('"${t}"','id') AS s`);
+        const seq = await dst.query(`SELECT pg_get_serial_sequence('"${D.schema}"."${t}"','id') AS s`);
         if (seq.rows[0] && seq.rows[0].s) {
           await dst.query(`SELECT setval($1, GREATEST((SELECT COALESCE(MAX(id),0) FROM "${t}"),1))`, [seq.rows[0].s]);
         }
